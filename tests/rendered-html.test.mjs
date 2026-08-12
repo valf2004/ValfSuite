@@ -70,12 +70,14 @@ test("persists validated availability requests in D1", async () => {
 });
 
 test("uses PostgreSQL on the VM without publishing a database port", async () => {
-  const [repository, compose] = await Promise.all([source("db/availability.ts"), source("docker-compose.yml")]);
-  assert.match(repository, /process\.env\.DATABASE_URL/);
+  const [repository, compose, dockerfile] = await Promise.all([source("db/availability.postgres.ts"), source("docker-compose.yml"), source("Dockerfile")]);
+  assert.match(repository, /process\.env(?:\.DATABASE_URL|\["DATABASE_URL"\])/);
   assert.match(repository, /CREATE TABLE IF NOT EXISTS availability_requests/);
   assert.match(compose, /image: postgres:17-alpine/);
   assert.match(compose, /postgres_data:\/var\/lib\/postgresql\/data/);
   assert.doesNotMatch(compose, /5432:5432/);
+  assert.match(dockerfile, /availability\.postgres\.ts db\/availability\.ts/);
+  assert.doesNotMatch(repository, /cloudflare:workers/);
 });
 
 test("notifies the four administrators after persistence", async () => {

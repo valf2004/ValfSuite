@@ -36,12 +36,12 @@ export async function sendAvailabilityNotification(data: AvailabilityEmail) {
 }
 
 function emailConfig() {
-  const host = process.env.SMTP_HOST?.trim();
-  const user = process.env.SMTP_USER?.trim();
-  const password = process.env.SMTP_APP_PASSWORD?.replace(/\s/g, "");
-  const recipients = process.env.EMAIL_RECIPIENTS?.split(",").map(value => value.trim()).filter(Boolean);
+  const host = process.env["SMTP_HOST"]?.trim();
+  const user = process.env["SMTP_USER"]?.trim();
+  const password = process.env["SMTP_APP_PASSWORD"]?.replace(/\s/g, "");
+  const recipients = process.env["EMAIL_RECIPIENTS"]?.split(",").map(value => value.trim()).filter(Boolean);
   if (!host || !user || !password || !recipients?.length) return null;
-  return { host, user, password, recipients, port: Number(process.env.SMTP_PORT || 465), secure: process.env.SMTP_SECURE !== "false" };
+  return { host, user, password, recipients, port: Number(process.env["SMTP_PORT"] || 465), secure: process.env["SMTP_SECURE"] !== "false" };
 }
 
 function textBody(data: AvailabilityEmail) {

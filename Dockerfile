@@ -4,6 +4,7 @@ RUN corepack enable
 COPY package.json pnpm-lock.yaml ./
 RUN pnpm install --frozen-lockfile --ignore-scripts
 COPY . .
+RUN cp db/availability.postgres.ts db/availability.ts
 ENV WRANGLER_LOG_PATH=.wrangler/build.log
 RUN pnpm exec vinext build
 
