@@ -77,6 +77,7 @@ test("uses PostgreSQL on the VM without publishing a database port", async () =>
   assert.match(compose, /postgres_data:\/var\/lib\/postgresql\/data/);
   assert.doesNotMatch(compose, /5432:5432/);
   assert.match(dockerfile, /availability\.postgres\.ts db\/availability\.ts/);
+  assert.match(dockerfile, /delete j\.exports\.workerd/);
   assert.doesNotMatch(repository, /cloudflare:workers/);
 });
 
