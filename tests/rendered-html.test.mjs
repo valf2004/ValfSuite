@@ -54,3 +54,17 @@ test("provides a five-step check-in preview with arrival details", async () => {
   assert.match(checkin, /nextDay/);
   assert.match(checkin, /window\.location\.assign/);
 });
+
+test("persists validated availability requests in D1", async () => {
+  const [route, schema, hosting] = await Promise.all([
+    source("app/api/disponibilita/route.ts"),
+    source("db/schema.ts"),
+    source(".openai/hosting.json"),
+  ]);
+
+  assert.match(route, /getDb\(\)\.insert\(availabilityRequests\)/);
+  assert.match(route, /departureDate <= arrivalDate/);
+  assert.match(route, /crypto\.randomUUID/);
+  assert.match(schema, /availability_requests/);
+  assert.equal(JSON.parse(hosting).d1, "DB");
+});
