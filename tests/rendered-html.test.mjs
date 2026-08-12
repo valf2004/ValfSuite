@@ -62,11 +62,20 @@ test("persists validated availability requests in D1", async () => {
     source(".openai/hosting.json"),
   ]);
 
-  assert.match(route, /getDb\(\)\.insert\(availabilityRequests\)/);
+  assert.match(route, /createAvailabilityRequest/);
   assert.match(route, /departureDate <= arrivalDate/);
   assert.match(route, /crypto\.randomUUID/);
   assert.match(schema, /availability_requests/);
   assert.equal(JSON.parse(hosting).d1, "DB");
+});
+
+test("uses PostgreSQL on the VM without publishing a database port", async () => {
+  const [repository, compose] = await Promise.all([source("db/availability.ts"), source("docker-compose.yml")]);
+  assert.match(repository, /process\.env\.DATABASE_URL/);
+  assert.match(repository, /CREATE TABLE IF NOT EXISTS availability_requests/);
+  assert.match(compose, /image: postgres:17-alpine/);
+  assert.match(compose, /postgres_data:\/var\/lib\/postgresql\/data/);
+  assert.doesNotMatch(compose, /5432:5432/);
 });
 
 test("notifies the four administrators after persistence", async () => {
