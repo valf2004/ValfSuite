@@ -3,7 +3,8 @@ import { integer, sqliteTable, text, index } from "drizzle-orm/sqlite-core";
 
 export const availabilityRequests = sqliteTable("availability_requests", {
   id: text("id").primaryKey(),
-  status: text("status", { enum: ["new", "contacted", "confirmed", "declined", "archived"] }).notNull().default("new"),
+  status: text("status", { enum: ["quote_requested", "quote_sent", "accepted", "checked_in", "police_registered", "archived"] }).notNull().default("quote_requested"),
+  archiveOutcome: text("archive_outcome", { enum: ["completed", "cancelled", "unavailable"] }),
   name: text("name").notNull(),
   email: text("email").notNull(),
   arrivalDate: text("arrival_date").notNull(),

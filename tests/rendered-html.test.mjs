@@ -81,6 +81,14 @@ test("uses PostgreSQL on the VM without publishing a database port", async () =>
   assert.doesNotMatch(repository, /cloudflare:workers/);
 });
 
+test("models the complete booking workflow and archive outcomes", async () => {
+  const [schema, dashboard, postgresRepository, migration] = await Promise.all([source("db/schema.ts"), source("app/area-privata/RequestsDashboard.tsx"), source("db/availability.postgres.ts"), source("drizzle/0001_booking_workflow.sql")]);
+  for (const status of ["quote_requested","quote_sent","accepted","checked_in","police_registered","archived"]) assert.match(schema,new RegExp(status));
+  for (const outcome of ["completed","cancelled","unavailable"]) assert.match(dashboard,new RegExp(outcome));
+  assert.match(postgresRepository,/departure_date < CURRENT_DATE/);
+  assert.match(migration,/archive_outcome/);
+});
+
 test("notifies the four administrators after persistence", async () => {
   const [route, mailer] = await Promise.all([
     source("app/api/disponibilita/route.ts"),

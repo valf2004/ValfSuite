@@ -111,6 +111,7 @@
 .request-tabs button { flex:1; min-width:max-content; border:0; border-bottom:3px solid transparent; background:transparent; padding:20px 18px 17px; color:#76685d; font-weight:600; cursor:pointer; }
 .request-tabs button[aria-selected="true"] { color:var(--sea-dark); border-bottom-color:var(--sea); }
 .request-tabs span { margin-left:8px; display:inline-grid; place-items:center; min-width:22px; height:22px; border-radius:99px; background:var(--ivory); font-size:11px; }
+.archive-filters { display:flex; gap:8px; flex-wrap:wrap; padding:18px 28px 0; }.archive-filters button { border:1px solid var(--line); border-radius:99px; padding:8px 13px; background:white; color:var(--brown); cursor:pointer; }.archive-filters button.active { background:var(--sea); border-color:var(--sea); color:white; }
 .dashboard-notice { min-height:24px; margin:14px 28px 0; color:var(--sea-dark); font-size:13px; }
 .request-list { padding:0 28px 28px; }.request-empty { padding:55px 0; text-align:center; color:var(--taupe); }
 .request-card { padding:28px 0; border-top:1px solid var(--line); }.request-card:first-of-type { border-top:0; }.request-card-main h2 { font-size:38px; }.request-card-main p:last-child { margin:6px 0 0; color:#76685d; }.request-card-main a { color:var(--sea-dark); }
