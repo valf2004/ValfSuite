@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useMemo, useState } from "react";
+import { FormEvent, MouseEvent, useMemo, useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
 
@@ -62,7 +62,7 @@ export function GuestCheckin() {
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
-  if (complete) return <main className="checkin-page"><CheckinHeader lang={lang} setLang={setLang}/><section className="checkin-complete"><span>✓</span><p className="eyebrow">VALF Suite</p><h1>{t.complete}</h1><p>{t.completeText}</p><Link className="button" href={lang === "it" ? "/" : `/${lang}`}>{t.home}</Link></section></main>;
+  if (complete) return <main className="checkin-page"><CheckinHeader lang={lang} setLang={setLang}/><section className="checkin-complete"><span>✓</span><p className="eyebrow">VALF Suite</p><h1>{t.complete}</h1><p>{t.completeText}</p><Link className="button" href={lang === "it" ? "/" : `/${lang}`} onClick={event => navigateHome(event, lang)}>{t.home}</Link></section></main>;
 
   return <main className="checkin-page">
     <CheckinHeader lang={lang} setLang={setLang}/>
@@ -86,7 +86,7 @@ export function GuestCheckin() {
   </main>;
 }
 
-function CheckinHeader({lang,setLang}:{lang:Lang;setLang:(lang:Lang)=>void}) { return <header className="checkin-header"><Link href="/"><Image src="/logo-valf-suite.png" width={174} height={64} alt="VALF Suite" priority/></Link><label><span className="sr-only">Language</span><select value={lang} onChange={e=>setLang(e.target.value as Lang)}>{(Object.keys(languageNames) as Lang[]).map(key=><option value={key} key={key}>{languageNames[key]}</option>)}</select></label></header>; }
+function CheckinHeader({lang,setLang}:{lang:Lang;setLang:(lang:Lang)=>void}) { return <header className="checkin-header"><Link href={lang === "it" ? "/" : `/${lang}`} onClick={event => navigateHome(event, lang)}><Image src="/logo-valf-suite.png" width={174} height={64} alt="VALF Suite" priority/></Link><label><span className="sr-only">Language</span><select value={lang} onChange={e=>setLang(e.target.value as Lang)}>{(Object.keys(languageNames) as Lang[]).map(key=><option value={key} key={key}>{languageNames[key]}</option>)}</select></label></header>; }
 
 function Field({label,name,type="text",defaultValue,min,max}:{label:string;name:string;type?:string;defaultValue?:string;min?:string;max?:string}) { return <label>{label}<input name={name} type={type} defaultValue={defaultValue} min={min} max={max} required/></label>; }
 
@@ -109,3 +109,4 @@ function validateCurrentDates(step:number, values:Record<string,string>, today:s
 function isoDate(date:Date) { const year=date.getFullYear(); const month=String(date.getMonth()+1).padStart(2,"0"); const day=String(date.getDate()).padStart(2,"0"); return `${year}-${month}-${day}`; }
 function shiftYears(value:string, years:number) { const date=new Date(`${value}T12:00:00`); date.setFullYear(date.getFullYear()+years); return isoDate(date); }
 function nextDay(value:string) { const date=new Date(`${value}T12:00:00`); date.setDate(date.getDate()+1); return isoDate(date); }
+function navigateHome(event:MouseEvent<HTMLAnchorElement>, lang:Lang) { event.preventDefault(); window.location.assign(lang === "it" ? "/" : `/${lang}`); }
