@@ -1,6 +1,5 @@
 import { desc, eq } from "drizzle-orm";
 import postgres, { type Sql } from "postgres";
-import { getDb } from ".";
 import { availabilityRequests } from "./schema";
 
 export type AvailabilityStatus = "new" | "contacted" | "confirmed" | "declined" | "archived";
@@ -20,7 +19,10 @@ function postgresClient() {
 
 export async function createAvailabilityRequest(record: NewAvailabilityRecord) {
   const pg = postgresClient();
-  if (!pg) return getDb().insert(availabilityRequests).values(record);
+  if (!pg) {
+    const { getDb } = await import(".");
+    return getDb().insert(availabilityRequests).values(record);
+  }
   await pg.ready;
   await pg.sql`
     INSERT INTO availability_requests
@@ -33,6 +35,7 @@ export async function createAvailabilityRequest(record: NewAvailabilityRecord) {
 export async function listAvailabilityRequests(status?: AvailabilityStatus) {
   const pg = postgresClient();
   if (!pg) {
+    const { getDb } = await import(".");
     return status
       ? getDb().select().from(availabilityRequests).where(eq(availabilityRequests.status, status)).orderBy(desc(availabilityRequests.createdAt))
       : getDb().select().from(availabilityRequests).orderBy(desc(availabilityRequests.createdAt));
@@ -47,7 +50,10 @@ export async function listAvailabilityRequests(status?: AvailabilityStatus) {
 export async function updateAvailabilityStatus(id: string, status: AvailabilityStatus) {
   const updatedAt = new Date().toISOString();
   const pg = postgresClient();
-  if (!pg) return getDb().update(availabilityRequests).set({ status, updatedAt }).where(eq(availabilityRequests.id, id)).returning();
+  if (!pg) {
+    const { getDb } = await import(".");
+    return getDb().update(availabilityRequests).set({ status, updatedAt }).where(eq(availabilityRequests.id, id)).returning();
+  }
   await pg.ready;
   const rows = await pg.sql`UPDATE availability_requests SET status = ${status}, updated_at = ${updatedAt} WHERE id = ${id} RETURNING *`;
   return rows.map(mapRow);
