@@ -25,18 +25,38 @@ const arrivalText: Record<Lang, { step:string; time:string; transport:string; no
   de: { step:"Anreise", time:"Voraussichtliche Uhrzeit", transport:"Wie reisen Sie an?", notes:"Hinweise für Angela (optional)", car:"Auto", train:"Zug", plane:"Flugzeug", other:"Andere", help:"Diese Angaben helfen uns, Sie zur richtigen Zeit zu empfangen." },
 };
 
+const dateText: Record<Lang, { pastArrival:string; departureOrder:string; futureBirth:string; oldBirth:string; adultLead:string }> = {
+  it: { pastArrival:"La data di arrivo non può essere precedente a oggi.", departureOrder:"La partenza deve essere successiva all’arrivo.", futureBirth:"La data di nascita non può essere futura.", oldBirth:"Controlla la data di nascita: non può risalire a più di 120 anni fa.", adultLead:"L’ospite principale deve avere almeno 18 anni." },
+  en: { pastArrival:"The arrival date cannot be earlier than today.", departureOrder:"Departure must be after arrival.", futureBirth:"The date of birth cannot be in the future.", oldBirth:"Please check the date of birth: it cannot be more than 120 years ago.", adultLead:"The lead guest must be at least 18 years old." },
+  fr: { pastArrival:"La date d’arrivée ne peut pas être antérieure à aujourd’hui.", departureOrder:"Le départ doit être postérieur à l’arrivée.", futureBirth:"La date de naissance ne peut pas être future.", oldBirth:"Vérifiez la date de naissance : elle ne peut pas remonter à plus de 120 ans.", adultLead:"Le voyageur principal doit avoir au moins 18 ans." },
+  es: { pastArrival:"La fecha de llegada no puede ser anterior a hoy.", departureOrder:"La salida debe ser posterior a la llegada.", futureBirth:"La fecha de nacimiento no puede ser futura.", oldBirth:"Comprueba la fecha de nacimiento: no puede remontarse a más de 120 años.", adultLead:"El huésped principal debe tener al menos 18 años." },
+  de: { pastArrival:"Das Anreisedatum darf nicht vor dem heutigen Datum liegen.", departureOrder:"Die Abreise muss nach der Anreise liegen.", futureBirth:"Das Geburtsdatum darf nicht in der Zukunft liegen.", oldBirth:"Bitte prüfen Sie das Geburtsdatum: Es darf nicht mehr als 120 Jahre zurückliegen.", adultLead:"Der Hauptgast muss mindestens 18 Jahre alt sein." },
+};
+
 export function GuestCheckin() {
   const [lang, setLang] = useState<Lang>("it");
   const [step, setStep] = useState(0);
   const [guestCount, setGuestCount] = useState(2);
   const [complete, setComplete] = useState(false);
   const [values, setValues] = useState<Record<string,string>>({ reference: "VALF-DEMO-01" });
+  const [dateError, setDateError] = useState("");
   const t = text[lang];
   const a = arrivalText[lang];
+  const d = dateText[lang];
+  const today = isoDate(new Date());
+  const oldestBirthDate = shiftYears(today, -120);
+  const adultBirthDate = shiftYears(today, -18);
   const companions = useMemo(() => Array.from({ length: Math.max(0, guestCount - 1) }), [guestCount]);
 
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    const error = validateCurrentDates(step, values, today, oldestBirthDate, adultBirthDate, d);
+    if (error) {
+      setDateError(error);
+      event.currentTarget.querySelector<HTMLInputElement>('input[type="date"]:invalid')?.focus();
+      return;
+    }
+    setDateError("");
     if (step < steps.length - 1) setStep(step + 1);
     else setComplete(true);
     window.scrollTo({ top: 0, behavior: "smooth" });
@@ -52,10 +72,11 @@ export function GuestCheckin() {
       <ol className="checkin-progress" aria-label="Progress">
         {steps.map((key, index) => <li key={key} className={index === step ? "active" : index < step ? "done" : ""} aria-current={index === step ? "step" : undefined}><span>{index < step ? "✓" : index + 1}</span><b>{key === "arrival" ? a.step : t[key]}</b></li>)}
       </ol>
-      <form className="checkin-form" onSubmit={submit} onChange={event => { const target = event.target as HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement; if (target.name) setValues(current => ({ ...current, [target.name]: target.value })); }}>
-        {step === 0 && <fieldset><legend>{t.stay}</legend><p className="form-help">VALF Suite · Via Aurelia Nord 97, Arcola (SP)</p><div className="checkin-grid"><Field label={t.arrival} name="arrival-date" type="date" defaultValue={values["arrival-date"]}/><Field label={t.departure} name="departure-date" type="date" defaultValue={values["departure-date"]}/><label>{t.count}<select value={guestCount} onChange={e=>setGuestCount(Number(e.target.value))}>{[1,2,3,4].map(n=><option key={n} value={n}>{n}</option>)}</select></label><Field label={t.reference} name="reference" defaultValue={values.reference}/></div></fieldset>}
-        {step === 1 && <fieldset><legend>{t.lead}</legend><p className="form-help">{t.legal}</p><PersonFields t={t} values={values} prefix="lead" document/></fieldset>}
-        {step === 2 && <fieldset><legend>{t.guests}</legend>{companions.length === 0 ? <p className="empty-guests">—</p> : companions.map((_, index)=><section className="companion" key={index}><h2>{t.guests} {index + 1}</h2><PersonFields t={t} values={values} prefix={`guest-${index + 1}`}/></section>)}</fieldset>}
+      <form className="checkin-form" onSubmit={submit} onChange={event => { const target = event.target as HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement; if (target.name) { setDateError(""); setValues(current => ({ ...current, [target.name]: target.value })); } }}>
+        {dateError && <p className="form-error" role="alert">{dateError}</p>}
+        {step === 0 && <fieldset><legend>{t.stay}</legend><p className="form-help">VALF Suite · Via Aurelia Nord 97, Arcola (SP)</p><div className="checkin-grid"><Field label={t.arrival} name="arrival-date" type="date" min={today} defaultValue={values["arrival-date"]}/><Field label={t.departure} name="departure-date" type="date" min={values["arrival-date"] ? nextDay(values["arrival-date"]) : nextDay(today)} defaultValue={values["departure-date"]}/><label>{t.count}<select value={guestCount} onChange={e=>setGuestCount(Number(e.target.value))}>{[1,2,3,4].map(n=><option key={n} value={n}>{n}</option>)}</select></label><Field label={t.reference} name="reference" defaultValue={values.reference}/></div></fieldset>}
+        {step === 1 && <fieldset><legend>{t.lead}</legend><p className="form-help">{t.legal}</p><PersonFields t={t} values={values} prefix="lead" minBirth={oldestBirthDate} maxBirth={adultBirthDate} document/></fieldset>}
+        {step === 2 && <fieldset><legend>{t.guests}</legend>{companions.length === 0 ? <p className="empty-guests">—</p> : companions.map((_, index)=><section className="companion" key={index}><h2>{t.guests} {index + 1}</h2><PersonFields t={t} values={values} prefix={`guest-${index + 1}`} minBirth={oldestBirthDate} maxBirth={today}/></section>)}</fieldset>}
         {step === 3 && <fieldset><legend>{a.step}</legend><p className="form-help">{a.help}</p><div className="checkin-grid"><Field label={a.time} name="arrival-time" type="time" defaultValue={values["arrival-time"]}/><label>{a.transport}<select name="transport" required defaultValue={values.transport || ""}><option value="" disabled>{t.choose}</option><option>{a.car}</option><option>{a.train}</option><option>{a.plane}</option><option>{a.other}</option></select></label><label className="field-wide">{a.notes}<textarea name="arrival-notes" rows={5} defaultValue={values["arrival-notes"]}/></label></div></fieldset>}
         {step === 4 && <fieldset><legend>{t.review}</legend><div className="review-card"><div><small>{t.stay}</small><strong>{values["arrival-date"] || "—"} → {values["departure-date"] || "—"}</strong><span>{guestCount} {t.count.toLowerCase()}</span></div><div><small>{t.reference}</small><strong>{values.reference || "—"}</strong><span>{values["lead-name"]} {values["lead-surname"]}</span></div><div><small>{a.step}</small><strong>{values.transport || "—"} · {values["arrival-time"] || "—"}</strong><span>{values["arrival-notes"] || a.help}</span></div></div><p className="legal-note">{t.legal}</p><label className="checkin-consent"><input type="checkbox" required/><span>{t.privacy}</span></label></fieldset>}
         <div className="checkin-actions">{step > 0 && <button type="button" className="button-secondary" onClick={()=>setStep(step-1)}>{t.back}</button>}<button className="button" type="submit">{step === steps.length - 1 ? t.send : t.next}</button></div>
@@ -67,6 +88,24 @@ export function GuestCheckin() {
 
 function CheckinHeader({lang,setLang}:{lang:Lang;setLang:(lang:Lang)=>void}) { return <header className="checkin-header"><Link href="/"><Image src="/logo-valf-suite.png" width={174} height={64} alt="VALF Suite" priority/></Link><label><span className="sr-only">Language</span><select value={lang} onChange={e=>setLang(e.target.value as Lang)}>{(Object.keys(languageNames) as Lang[]).map(key=><option value={key} key={key}>{languageNames[key]}</option>)}</select></label></header>; }
 
-function Field({label,name,type="text",defaultValue}:{label:string;name:string;type?:string;defaultValue?:string}) { return <label>{label}<input name={name} type={type} defaultValue={defaultValue} required/></label>; }
+function Field({label,name,type="text",defaultValue,min,max}:{label:string;name:string;type?:string;defaultValue?:string;min?:string;max?:string}) { return <label>{label}<input name={name} type={type} defaultValue={defaultValue} min={min} max={max} required/></label>; }
 
-function PersonFields({t,values,prefix,document=false}:{t:Record<string,string>;values:Record<string,string>;prefix:string;document?:boolean}) { const name=(key:string)=>`${prefix}-${key}`; return <div className="checkin-grid"><Field label={t.name} name={name("name")} defaultValue={values[name("name")]}/><Field label={t.surname} name={name("surname")} defaultValue={values[name("surname")]}/><Field label={t.birth} name={name("birth")} type="date" defaultValue={values[name("birth")]}/><label>{t.sex}<select name={name("sex")} required defaultValue={values[name("sex")] || ""}><option value="" disabled>{t.choose}</option><option>{t.male}</option><option>{t.female}</option></select></label><Field label={t.citizenship} name={name("citizenship")} defaultValue={values[name("citizenship")]}/><Field label={t.birthCountry} name={name("birthCountry")} defaultValue={values[name("birthCountry")]}/><Field label={t.birthPlace} name={name("birthPlace")} defaultValue={values[name("birthPlace")]}/>{document && <><label>{t.documentType}<select name={name("documentType")} required defaultValue={values[name("documentType")] || ""}><option value="" disabled>{t.choose}</option><option>Identity card</option><option>Passport</option><option>Driving licence</option></select></label><Field label={t.documentNumber} name={name("documentNumber")} defaultValue={values[name("documentNumber")]}/><Field label={t.issuePlace} name={name("issuePlace")} defaultValue={values[name("issuePlace")]}/></>}</div>; }
+function PersonFields({t,values,prefix,minBirth,maxBirth,document=false}:{t:Record<string,string>;values:Record<string,string>;prefix:string;minBirth:string;maxBirth:string;document?:boolean}) { const name=(key:string)=>`${prefix}-${key}`; return <div className="checkin-grid"><Field label={t.name} name={name("name")} defaultValue={values[name("name")]}/><Field label={t.surname} name={name("surname")} defaultValue={values[name("surname")]}/><Field label={t.birth} name={name("birth")} type="date" min={minBirth} max={maxBirth} defaultValue={values[name("birth")]}/><label>{t.sex}<select name={name("sex")} required defaultValue={values[name("sex")] || ""}><option value="" disabled>{t.choose}</option><option>{t.male}</option><option>{t.female}</option></select></label><Field label={t.citizenship} name={name("citizenship")} defaultValue={values[name("citizenship")]}/><Field label={t.birthCountry} name={name("birthCountry")} defaultValue={values[name("birthCountry")]}/><Field label={t.birthPlace} name={name("birthPlace")} defaultValue={values[name("birthPlace")]}/>{document && <><label>{t.documentType}<select name={name("documentType")} required defaultValue={values[name("documentType")] || ""}><option value="" disabled>{t.choose}</option><option>Identity card</option><option>Passport</option><option>Driving licence</option></select></label><Field label={t.documentNumber} name={name("documentNumber")} defaultValue={values[name("documentNumber")]}/><Field label={t.issuePlace} name={name("issuePlace")} defaultValue={values[name("issuePlace")]}/></>}</div>; }
+
+function validateCurrentDates(step:number, values:Record<string,string>, today:string, oldest:string, adult:string, messages:typeof dateText.it) {
+  if (step === 0) {
+    if (values["arrival-date"] < today) return messages.pastArrival;
+    if (values["departure-date"] <= values["arrival-date"]) return messages.departureOrder;
+  }
+  if (step === 1 || step === 2) {
+    const births = Object.entries(values).filter(([key]) => key.endsWith("-birth") && (step === 1 ? key.startsWith("lead-") : key.startsWith("guest-")));
+    if (births.some(([, value]) => value > today)) return messages.futureBirth;
+    if (births.some(([, value]) => value < oldest)) return messages.oldBirth;
+    if (step === 1 && values["lead-birth"] > adult) return messages.adultLead;
+  }
+  return "";
+}
+
+function isoDate(date:Date) { const year=date.getFullYear(); const month=String(date.getMonth()+1).padStart(2,"0"); const day=String(date.getDate()).padStart(2,"0"); return `${year}-${month}-${day}`; }
+function shiftYears(value:string, years:number) { const date=new Date(`${value}T12:00:00`); date.setFullYear(date.getFullYear()+years); return isoDate(date); }
+function nextDay(value:string) { const date=new Date(`${value}T12:00:00`); date.setDate(date.getDate()+1); return isoDate(date); }

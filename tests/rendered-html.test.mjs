@@ -48,4 +48,8 @@ test("provides a five-step check-in preview with arrival details", async () => {
   assert.match(checkin, /arrival-time/);
   assert.match(checkin, /arrival-notes/);
   assert.match(checkin, /setValues/);
+  assert.match(checkin, /departureOrder/);
+  assert.match(checkin, /adultLead/);
+  assert.match(checkin, /shiftYears/);
+  assert.match(checkin, /nextDay/);
 });
