@@ -1,6 +1,8 @@
 "use client";
 
 import { FormEvent, useMemo, useState } from "react";
+import Link from "next/link";
+import Image from "next/image";
 
 type Lang = "it" | "en" | "fr" | "es" | "de";
 
@@ -13,14 +15,24 @@ const text: Record<Lang, Record<string, string>> = {
   de: { demo:"Sichere Vorschau", demoText:"Diese Version speichert oder übermittelt keine personenbezogenen Daten.", title:"Online-Vorab-Check-in", intro:"Geben Sie die Gästedaten vorab ein. Angela prüft die Originaldokumente bei Ihrer Ankunft.", stay:"Aufenthalt", lead:"Hauptgast", guests:"Weitere Gäste", review:"Übersicht", arrival:"Anreise", departure:"Abreise", count:"Anzahl der Gäste", reference:"Buchungscode", name:"Vorname", surname:"Nachname", birth:"Geburtsdatum", sex:"Geschlecht", citizenship:"Staatsangehörigkeit", birthCountry:"Geburtsland", birthPlace:"Geburtsort", documentType:"Dokumentart", documentNumber:"Dokumentnummer", issuePlace:"Ausstellungsort", male:"Männlich", female:"Weiblich", choose:"Auswählen", back:"Zurück", next:"Weiter", send:"An Angela senden", privacy:"Ich habe die Datenschutzhinweise zur Verarbeitung für die Pflichten der öffentlichen Sicherheit gelesen.", legal:"Die Daten werden nur zur Verwaltung des Aufenthalts und zur Erfüllung von Artikel 109 T.U.L.P.S. verwendet. Dokumentfotos sind nicht erforderlich.", complete:"Demo-Vorab-Check-in abgeschlossen", completeText:"In dieser Vorschau wurden keine Daten gespeichert. In der endgültigen Version wird Angela benachrichtigt und prüft die Dokumente bei der Ankunft.", home:"Zurück zur Website" },
 };
 
-const steps = ["stay", "lead", "guests", "review"] as const;
+const steps = ["stay", "lead", "guests", "arrival", "review"] as const;
+
+const arrivalText: Record<Lang, { step:string; time:string; transport:string; notes:string; car:string; train:string; plane:string; other:string; help:string }> = {
+  it: { step:"Arrivo", time:"Orario previsto", transport:"Come arriverete?", notes:"Note per Angela (facoltative)", car:"Auto", train:"Treno", plane:"Aereo", other:"Altro", help:"Queste informazioni ci aiutano ad accogliervi al momento giusto." },
+  en: { step:"Arrival", time:"Expected time", transport:"How will you arrive?", notes:"Notes for Angela (optional)", car:"Car", train:"Train", plane:"Plane", other:"Other", help:"This information helps us welcome you at the right time." },
+  fr: { step:"Arrivée", time:"Heure prévue", transport:"Comment arriverez-vous ?", notes:"Notes pour Angela (facultatif)", car:"Voiture", train:"Train", plane:"Avion", other:"Autre", help:"Ces informations nous aident à vous accueillir au bon moment." },
+  es: { step:"Llegada", time:"Hora prevista", transport:"¿Cómo llegarán?", notes:"Notas para Angela (opcional)", car:"Coche", train:"Tren", plane:"Avión", other:"Otro", help:"Esta información nos ayuda a recibirles en el momento adecuado." },
+  de: { step:"Anreise", time:"Voraussichtliche Uhrzeit", transport:"Wie reisen Sie an?", notes:"Hinweise für Angela (optional)", car:"Auto", train:"Zug", plane:"Flugzeug", other:"Andere", help:"Diese Angaben helfen uns, Sie zur richtigen Zeit zu empfangen." },
+};
 
 export function GuestCheckin() {
   const [lang, setLang] = useState<Lang>("it");
   const [step, setStep] = useState(0);
   const [guestCount, setGuestCount] = useState(2);
   const [complete, setComplete] = useState(false);
+  const [values, setValues] = useState<Record<string,string>>({ reference: "VALF-DEMO-01" });
   const t = text[lang];
+  const a = arrivalText[lang];
   const companions = useMemo(() => Array.from({ length: Math.max(0, guestCount - 1) }), [guestCount]);
 
   function submit(event: FormEvent<HTMLFormElement>) {
@@ -30,7 +42,7 @@ export function GuestCheckin() {
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
-  if (complete) return <main className="checkin-page"><CheckinHeader lang={lang} setLang={setLang}/><section className="checkin-complete"><span>✓</span><p className="eyebrow">VALF Suite</p><h1>{t.complete}</h1><p>{t.completeText}</p><a className="button" href={lang === "it" ? "/" : `/${lang}`}>{t.home}</a></section></main>;
+  if (complete) return <main className="checkin-page"><CheckinHeader lang={lang} setLang={setLang}/><section className="checkin-complete"><span>✓</span><p className="eyebrow">VALF Suite</p><h1>{t.complete}</h1><p>{t.completeText}</p><Link className="button" href={lang === "it" ? "/" : `/${lang}`}>{t.home}</Link></section></main>;
 
   return <main className="checkin-page">
     <CheckinHeader lang={lang} setLang={setLang}/>
@@ -38,13 +50,14 @@ export function GuestCheckin() {
     <section className="checkin-intro"><p className="eyebrow">VALF Suite · Arcola</p><h1>{t.title}</h1><p>{t.intro}</p></section>
     <section className="checkin-shell">
       <ol className="checkin-progress" aria-label="Progress">
-        {steps.map((key, index) => <li key={key} className={index === step ? "active" : index < step ? "done" : ""}><span>{index < step ? "✓" : index + 1}</span><b>{t[key]}</b></li>)}
+        {steps.map((key, index) => <li key={key} className={index === step ? "active" : index < step ? "done" : ""} aria-current={index === step ? "step" : undefined}><span>{index < step ? "✓" : index + 1}</span><b>{key === "arrival" ? a.step : t[key]}</b></li>)}
       </ol>
-      <form className="checkin-form" onSubmit={submit}>
-        {step === 0 && <fieldset><legend>{t.stay}</legend><p className="form-help">VALF Suite · Via Aurelia Nord 97, Arcola (SP)</p><div className="checkin-grid"><Field label={t.arrival} name="arrival" type="date"/><Field label={t.departure} name="departure" type="date"/><label>{t.count}<select value={guestCount} onChange={e=>setGuestCount(Number(e.target.value))}>{[1,2,3,4].map(n=><option key={n} value={n}>{n}</option>)}</select></label><Field label={t.reference} name="reference" defaultValue="VALF-DEMO-01"/></div></fieldset>}
-        {step === 1 && <fieldset><legend>{t.lead}</legend><p className="form-help">{t.legal}</p><PersonFields t={t} document/></fieldset>}
-        {step === 2 && <fieldset><legend>{t.guests}</legend>{companions.length === 0 ? <p className="empty-guests">—</p> : companions.map((_, index)=><section className="companion" key={index}><h2>{t.guests} {index + 1}</h2><PersonFields t={t}/></section>)}</fieldset>}
-        {step === 3 && <fieldset><legend>{t.review}</legend><div className="review-card"><div><small>{t.stay}</small><strong>VALF Suite</strong><span>{guestCount} {t.count.toLowerCase()}</span></div><div><small>{t.reference}</small><strong>VALF-DEMO-01</strong><span>{t.demoText}</span></div></div><p className="legal-note">{t.legal}</p><label className="checkin-consent"><input type="checkbox" required/><span>{t.privacy}</span></label></fieldset>}
+      <form className="checkin-form" onSubmit={submit} onChange={event => { const target = event.target as HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement; if (target.name) setValues(current => ({ ...current, [target.name]: target.value })); }}>
+        {step === 0 && <fieldset><legend>{t.stay}</legend><p className="form-help">VALF Suite · Via Aurelia Nord 97, Arcola (SP)</p><div className="checkin-grid"><Field label={t.arrival} name="arrival-date" type="date" defaultValue={values["arrival-date"]}/><Field label={t.departure} name="departure-date" type="date" defaultValue={values["departure-date"]}/><label>{t.count}<select value={guestCount} onChange={e=>setGuestCount(Number(e.target.value))}>{[1,2,3,4].map(n=><option key={n} value={n}>{n}</option>)}</select></label><Field label={t.reference} name="reference" defaultValue={values.reference}/></div></fieldset>}
+        {step === 1 && <fieldset><legend>{t.lead}</legend><p className="form-help">{t.legal}</p><PersonFields t={t} values={values} prefix="lead" document/></fieldset>}
+        {step === 2 && <fieldset><legend>{t.guests}</legend>{companions.length === 0 ? <p className="empty-guests">—</p> : companions.map((_, index)=><section className="companion" key={index}><h2>{t.guests} {index + 1}</h2><PersonFields t={t} values={values} prefix={`guest-${index + 1}`}/></section>)}</fieldset>}
+        {step === 3 && <fieldset><legend>{a.step}</legend><p className="form-help">{a.help}</p><div className="checkin-grid"><Field label={a.time} name="arrival-time" type="time" defaultValue={values["arrival-time"]}/><label>{a.transport}<select name="transport" required defaultValue={values.transport || ""}><option value="" disabled>{t.choose}</option><option>{a.car}</option><option>{a.train}</option><option>{a.plane}</option><option>{a.other}</option></select></label><label className="field-wide">{a.notes}<textarea name="arrival-notes" rows={5} defaultValue={values["arrival-notes"]}/></label></div></fieldset>}
+        {step === 4 && <fieldset><legend>{t.review}</legend><div className="review-card"><div><small>{t.stay}</small><strong>{values["arrival-date"] || "—"} → {values["departure-date"] || "—"}</strong><span>{guestCount} {t.count.toLowerCase()}</span></div><div><small>{t.reference}</small><strong>{values.reference || "—"}</strong><span>{values["lead-name"]} {values["lead-surname"]}</span></div><div><small>{a.step}</small><strong>{values.transport || "—"} · {values["arrival-time"] || "—"}</strong><span>{values["arrival-notes"] || a.help}</span></div></div><p className="legal-note">{t.legal}</p><label className="checkin-consent"><input type="checkbox" required/><span>{t.privacy}</span></label></fieldset>}
         <div className="checkin-actions">{step > 0 && <button type="button" className="button-secondary" onClick={()=>setStep(step-1)}>{t.back}</button>}<button className="button" type="submit">{step === steps.length - 1 ? t.send : t.next}</button></div>
       </form>
     </section>
@@ -52,8 +65,8 @@ export function GuestCheckin() {
   </main>;
 }
 
-function CheckinHeader({lang,setLang}:{lang:Lang;setLang:(lang:Lang)=>void}) { return <header className="checkin-header"><a href="/"><img src="/logo-valf-suite.png" alt="VALF Suite"/></a><label><span className="sr-only">Language</span><select value={lang} onChange={e=>setLang(e.target.value as Lang)}>{(Object.keys(languageNames) as Lang[]).map(key=><option value={key} key={key}>{languageNames[key]}</option>)}</select></label></header>; }
+function CheckinHeader({lang,setLang}:{lang:Lang;setLang:(lang:Lang)=>void}) { return <header className="checkin-header"><Link href="/"><Image src="/logo-valf-suite.png" width={174} height={64} alt="VALF Suite" priority/></Link><label><span className="sr-only">Language</span><select value={lang} onChange={e=>setLang(e.target.value as Lang)}>{(Object.keys(languageNames) as Lang[]).map(key=><option value={key} key={key}>{languageNames[key]}</option>)}</select></label></header>; }
 
 function Field({label,name,type="text",defaultValue}:{label:string;name:string;type?:string;defaultValue?:string}) { return <label>{label}<input name={name} type={type} defaultValue={defaultValue} required/></label>; }
 
-function PersonFields({t,document=false}:{t:Record<string,string>;document?:boolean}) { return <div className="checkin-grid"><Field label={t.name} name="name"/><Field label={t.surname} name="surname"/><Field label={t.birth} name="birth" type="date"/><label>{t.sex}<select required defaultValue=""><option value="" disabled>{t.choose}</option><option>{t.male}</option><option>{t.female}</option></select></label><Field label={t.citizenship} name="citizenship"/><Field label={t.birthCountry} name="birthCountry"/><Field label={t.birthPlace} name="birthPlace"/>{document && <><label>{t.documentType}<select required defaultValue=""><option value="" disabled>{t.choose}</option><option>Identity card</option><option>Passport</option><option>Driving licence</option></select></label><Field label={t.documentNumber} name="documentNumber"/><Field label={t.issuePlace} name="issuePlace"/></>}</div>; }
+function PersonFields({t,values,prefix,document=false}:{t:Record<string,string>;values:Record<string,string>;prefix:string;document?:boolean}) { const name=(key:string)=>`${prefix}-${key}`; return <div className="checkin-grid"><Field label={t.name} name={name("name")} defaultValue={values[name("name")]}/><Field label={t.surname} name={name("surname")} defaultValue={values[name("surname")]}/><Field label={t.birth} name={name("birth")} type="date" defaultValue={values[name("birth")]}/><label>{t.sex}<select name={name("sex")} required defaultValue={values[name("sex")] || ""}><option value="" disabled>{t.choose}</option><option>{t.male}</option><option>{t.female}</option></select></label><Field label={t.citizenship} name={name("citizenship")} defaultValue={values[name("citizenship")]}/><Field label={t.birthCountry} name={name("birthCountry")} defaultValue={values[name("birthCountry")]}/><Field label={t.birthPlace} name={name("birthPlace")} defaultValue={values[name("birthPlace")]}/>{document && <><label>{t.documentType}<select name={name("documentType")} required defaultValue={values[name("documentType")] || ""}><option value="" disabled>{t.choose}</option><option>Identity card</option><option>Passport</option><option>Driving licence</option></select></label><Field label={t.documentNumber} name={name("documentNumber")} defaultValue={values[name("documentNumber")]}/><Field label={t.issuePlace} name={name("issuePlace")} defaultValue={values[name("issuePlace")]}/></>}</div>; }

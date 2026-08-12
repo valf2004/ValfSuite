@@ -40,3 +40,12 @@ test("keeps the reserved area private and OAuth sessions compatible", async () =
   assert.match(gitignore, /^\.env\*/m);
   assert.match(gitignore, /^!\.env\.example$/m);
 });
+
+test("provides a five-step check-in preview with arrival details", async () => {
+  const checkin = await source("app/checkin/GuestCheckin.tsx");
+
+  assert.match(checkin, /\["stay", "lead", "guests", "arrival", "review"\]/);
+  assert.match(checkin, /arrival-time/);
+  assert.match(checkin, /arrival-notes/);
+  assert.match(checkin, /setValues/);
+});

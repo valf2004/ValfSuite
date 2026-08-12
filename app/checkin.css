@@ -9,7 +9,7 @@
 .checkin-intro { max-width:800px; margin:0 auto; padding:72px 32px 50px; text-align:center; }
 .checkin-intro h1 { font-size:clamp(48px,7vw,78px); }
 .checkin-intro > p:last-child { max-width:650px; margin:24px auto 0; color:#62564c; font:24px/1.4 'Cormorant Garamond',serif; }
-.checkin-shell { max-width:1040px; margin:0 auto; padding:0 32px 100px; display:grid; grid-template-columns:240px 1fr; gap:36px; align-items:start; }
+.checkin-shell { max-width:1100px; margin:0 auto; padding:0 32px 100px; display:grid; grid-template-columns:210px 1fr; gap:36px; align-items:start; }
 .checkin-progress { margin:0; padding:0; list-style:none; position:sticky; top:24px; }
 .checkin-progress li { display:flex; align-items:center; gap:13px; min-height:66px; color:#917a62; position:relative; }
 .checkin-progress li:not(:last-child)::after { content:""; position:absolute; width:1px; height:24px; background:#d8cabc; left:17px; bottom:-4px; }
@@ -25,12 +25,15 @@
 .checkin-grid { display:grid; grid-template-columns:1fr 1fr; gap:0 24px; }
 .checkin-grid label { margin-bottom:24px; }
 .checkin-form input,.checkin-form select { min-height:48px; }
+.checkin-form textarea { width:100%; resize:vertical; border:1px solid var(--line); padding:14px; background:white; color:inherit; font:inherit; }
+.field-wide { grid-column:1 / -1; }
 .checkin-actions { display:flex; justify-content:flex-end; gap:14px; border-top:1px solid var(--line); margin-top:28px; padding-top:28px; }
 .button-secondary { border:1px solid var(--line); border-radius:999px; padding:13px 24px; background:transparent; color:var(--brown); cursor:pointer; font-weight:600; }
 .companion { border-top:1px solid var(--line); padding-top:26px; margin-top:28px; }
 .companion h2 { font-size:28px; margin-bottom:25px; }
 .empty-guests { padding:60px 0; text-align:center; color:var(--taupe); }
 .review-card { display:grid; grid-template-columns:1fr 1fr; gap:18px; }
+.review-card > div:last-child:nth-child(3) { grid-column:1 / -1; }
 .review-card > div { padding:24px; background:var(--ivory); display:flex; flex-direction:column; }
 .review-card small { color:var(--taupe); text-transform:uppercase; letter-spacing:.12em; }
 .review-card strong { font:500 25px 'Cormorant Garamond',serif; color:var(--brown); margin:10px 0 3px; }
@@ -102,7 +105,7 @@
   .checkin-header,.dashboard-header { min-height:78px; padding:12px 20px; }
   .checkin-header img,.dashboard-header img { height:50px; }
   .checkin-shell { grid-template-columns:1fr; padding:0 20px 75px; }
-  .checkin-progress { position:static; display:grid; grid-template-columns:repeat(4,1fr); }
+  .checkin-progress { position:static; display:grid; grid-template-columns:repeat(5,1fr); }
   .checkin-progress li { flex-direction:column; gap:7px; text-align:center; }
   .checkin-progress li:not(:last-child)::after { height:1px; width:calc(100% - 44px); left:calc(50% + 22px); top:17px; }
   .checkin-progress li b { font-size:11px; }
@@ -117,6 +120,7 @@
   .checkin-intro > p:last-child { font-size:21px; }
   .checkin-form { padding:30px 20px; }
   .checkin-grid,.review-card { grid-template-columns:1fr; }
+  .field-wide,.review-card > div:last-child:nth-child(3) { grid-column:auto; }
   .checkin-actions { justify-content:space-between; }
   .dashboard-header .demo-pill { display:none; }
   .private-login > section { margin:35px auto; padding:42px 24px; }
