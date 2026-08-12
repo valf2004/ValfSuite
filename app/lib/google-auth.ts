@@ -6,7 +6,7 @@ const SESSION_COOKIE = "valf_private_session";
 const SESSION_ISSUER = "valfsuite-private-area";
 const GOOGLE_ISSUERS = ["https://accounts.google.com", "accounts.google.com"];
 const GOOGLE_JWKS = createRemoteJWKSet(new URL("https://www.googleapis.com/oauth2/v3/certs"));
-const defaultAllowed = ["valfsuite@gmail.com", "viliorlandi@gmail.com", "angrimaldi79@gmail.com", "valf2004@gmail.com"];
+const defaultAllowed = ["valfsuite@gmail.com", "viliorlandi@gmail.com", "angrimaldi@gmail.com", "valf2004@gmail.com"];
 
 export function authConfig() {
   return {
