@@ -1,5 +1,6 @@
 import { getDb } from "../../../db";
 import { availabilityRequests } from "../../../db/schema";
+import { sendAvailabilityNotification } from "../../lib/availability-email";
 
 const languages = new Set(["it", "en", "fr", "es", "de"]);
 const successMessage: Record<string, string> = {
@@ -35,6 +36,9 @@ export async function POST(request: Request) {
     const now = new Date().toISOString();
     const id = crypto.randomUUID();
     await getDb().insert(availabilityRequests).values({ id, name, email, arrivalDate, departureDate, guestCount, message, language, privacyAcceptedAt: now, createdAt: now, updatedAt: now });
+    await sendAvailabilityNotification({ id, name, email, arrivalDate, departureDate, guestCount, message, language }).catch(error => {
+      console.error("availability_email_failed", error instanceof Error ? error.message : "unknown");
+    });
     return Response.json({ ok: true, requestId: id, message: successMessage[language] }, { status: 201 });
   } catch (error) {
     console.error("availability_request_failed", error instanceof Error ? error.message : "unknown");

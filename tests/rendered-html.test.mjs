@@ -68,3 +68,16 @@ test("persists validated availability requests in D1", async () => {
   assert.match(schema, /availability_requests/);
   assert.equal(JSON.parse(hosting).d1, "DB");
 });
+
+test("notifies the four administrators after persistence", async () => {
+  const [route, mailer] = await Promise.all([
+    source("app/api/disponibilita/route.ts"),
+    source("app/lib/availability-email.ts"),
+  ]);
+  assert.ok(route.indexOf("insert(availabilityRequests)") < route.lastIndexOf("sendAvailabilityNotification"));
+  for (const email of ["valfsuite@gmail.com", "viliorlandi@gmail.com", "angrimaldi@gmail.com", "valf2004@gmail.com"]) {
+    assert.match(await source(".env.example"), new RegExp(email));
+  }
+  assert.match(mailer, /replyTo: data\.email/);
+  assert.match(mailer, /SMTP_APP_PASSWORD/);
+});
