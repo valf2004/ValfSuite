@@ -4,6 +4,7 @@ import { privateUserFromCookie } from "../../../lib/google-auth";
 import { sendQuoteEmail } from "../../../lib/availability-email";
 
 export async function POST(request: Request) {
+  try {
   const requestHeaders = await headers();
   const user = await privateUserFromCookie(requestHeaders.get("cookie"));
   if (!user) return Response.json({ message: "Accesso non autorizzato." }, { status: 401 });
@@ -25,4 +26,8 @@ export async function POST(request: Request) {
   const updated = await updateAvailabilityQuote(item.id, quoteAmountCents, subject, deliveredBody, user.email);
   const event = (await listAvailabilityEvents()).filter(row=>row.requestId===item.id).at(-1);
   return Response.json({ request: updated[0], event, sentBy: user.email });
+  } catch (error) {
+    console.error("quote_send_failed", error instanceof Error ? error.message : "unknown");
+    return Response.json({ message:"Invio del preventivo non riuscito. Verifica se l’email è stata ricevuta prima di riprovare." },{status:500});
+  }
 }

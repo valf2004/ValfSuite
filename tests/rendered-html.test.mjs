@@ -116,6 +116,9 @@ test("sends localized quotes and advances the workflow", async () => {
   assert.match(dashboard, /formatCurrency\(item\.quoteAmountCents\)/);
   assert.match(dashboard, /Preventivo non registrato/);
   assert.match(mailer, /sendQuoteEmail/);
+  assert.match(mailer, /return \{ sent: true as const, subject, body \}/);
+  assert.match(mailer, /return \{ sent: true as const, subject: copy\.subject, body: copy\.body \}/);
+  assert.match(route, /quote_send_failed/);
 });
 
 test("stores and displays the complete request timeline", async () => {

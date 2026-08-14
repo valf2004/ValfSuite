@@ -47,7 +47,7 @@ export async function sendQuoteEmail(to: string, subject: string, body: string) 
     text: body,
     html: `<div style="font-family:Arial,sans-serif;color:#2f2a25;max-width:640px;line-height:1.6;white-space:pre-wrap">${escapeHtml(body)}</div>`,
   });
-  return { sent: true as const, subject: copy.subject, body: copy.body };
+  return { sent: true as const, subject, body };
 }
 
 export async function sendAvailabilityConfirmation(data: AvailabilityEmail) {
@@ -63,7 +63,7 @@ export async function sendAvailabilityConfirmation(data: AvailabilityEmail) {
     text: copy.body,
     html: `<div style="font-family:Arial,sans-serif;color:#2f2a25;max-width:640px;line-height:1.6;white-space:pre-wrap"><h1 style="color:#164f4a;font-size:26px">${escapeHtml(copy.heading)}</h1>${escapeHtml(copy.body).replace(/\n/g,"<br>")}</div>`,
   });
-  return { sent: true as const };
+  return { sent: true as const, subject: copy.subject, body: copy.body };
 }
 
 function confirmationCopy(data: AvailabilityEmail) {
