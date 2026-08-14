@@ -110,7 +110,7 @@ test("sends localized quotes and advances the workflow", async () => {
   ]);
   for (const language of ["it", "en", "fr", "es", "de"]) assert.match(dashboard, new RegExp(`${language}:\\{subject:`));
   assert.match(dashboard, /\{PREZZO\}/);
-  assert.match(dashboard, /manual-status/);
+  assert.match(dashboard, /status-control/);
   assert.match(route, /privateUserFromCookie/);
   assert.match(route, /updateAvailabilityQuote\(item\.id, quoteAmountCents, subject, deliveredBody, user\.email\)/);
   assert.match(dashboard, /formatCurrency\(item\.quoteAmountCents\)/);
@@ -123,7 +123,9 @@ test("stores and displays the complete request timeline", async () => {
   assert.match(schema,/availability_events/);
   assert.match(dashboard,/request-expand/);
   assert.match(dashboard,/request-timeline/);
-  assert.match(dashboard,/Nota operatore/);
+  assert.match(dashboard,/status-modal/);
+  assert.match(dashboard,/testo completo di un’email/);
+  assert.doesNotMatch(dashboard,/className="request-message"/);
   assert.doesNotMatch(dashboard,/Attività in ordine di priorità/);
   assert.match(statusRoute,/note/);
   assert.match(requestRoute,/recordAvailabilityEvent/);
