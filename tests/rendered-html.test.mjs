@@ -114,7 +114,7 @@ test("sends localized quotes and advances the workflow", async () => {
   assert.match(route, /privateUserFromCookie/);
   assert.match(route, /updateAvailabilityQuote\(item\.id, quoteAmountCents, subject, deliveredBody, user\.email\)/);
   assert.match(dashboard, /formatCurrency\(item\.quoteAmountCents\)/);
-  assert.match(dashboard, /Non registrato/);
+  assert.match(dashboard, /Preventivo non registrato/);
   assert.match(mailer, /sendQuoteEmail/);
 });
 
@@ -122,11 +122,14 @@ test("stores and displays the complete request timeline", async () => {
   const [schema,dashboard,statusRoute,requestRoute,migration] = await Promise.all([source("db/schema.ts"),source("app/area-privata/RequestsDashboard.tsx"),source("app/api/gestione/richieste/route.ts"),source("app/api/disponibilita/route.ts"),source("drizzle/0003_request_timeline.sql")]);
   assert.match(schema,/availability_events/);
   assert.match(dashboard,/request-expand/);
+  assert.match(dashboard,/Apri cronologia/);
+  assert.doesNotMatch(dashboard,/>Dettagli</);
   assert.match(dashboard,/request-timeline/);
   assert.match(dashboard,/status-modal/);
   assert.match(dashboard,/testo completo di un’email/);
   assert.doesNotMatch(dashboard,/className="request-message"/);
   assert.doesNotMatch(dashboard,/Attività in ordine di priorità/);
+  assert.ok(dashboard.indexOf('className="request-actions"') < dashboard.indexOf('expanded && <div className="request-details"'));
   assert.match(statusRoute,/note/);
   assert.match(requestRoute,/recordAvailabilityEvent/);
   assert.match(migration,/idx_availability_events_request_created/);
