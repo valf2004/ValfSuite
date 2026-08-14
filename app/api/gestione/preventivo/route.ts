@@ -19,8 +19,20 @@ export async function POST(request: Request) {
   const item = (await listAvailabilityRequests()).find(row => row.id === data.id);
   if (!item) return Response.json({ message: "Richiesta non trovata." }, { status: 404 });
   const quoteAmountCents = Math.round(Number(price) * 100);
-  const localizedPrice = new Intl.NumberFormat(item.language || "it", { style: "currency", currency: "EUR" }).format(quoteAmountCents / 100);
-  const deliveredBody = body.replaceAll("{PREZZO}", localizedPrice);
+  const depositAmountCents = Math.round(quoteAmountCents * 0.3);
+  const balanceAmountCents = quoteAmountCents - depositAmountCents;
+  const locale = ({ it:"it-IT", en:"en-GB", fr:"fr-FR", es:"es-ES", de:"de-DE" } as Record<string,string>)[item.language] || "it-IT";
+  const currency = new Intl.NumberFormat(locale, { style: "currency", currency: "EUR" });
+  const balanceDueDate = new Date(`${item.arrivalDate}T12:00:00Z`);
+  balanceDueDate.setUTCDate(balanceDueDate.getUTCDate() - 7);
+  const localizedBalanceDueDate = new Intl.DateTimeFormat(locale, { day:"numeric", month:"long", year:"numeric", timeZone:"UTC" }).format(balanceDueDate);
+  const replacements:Record<string,string> = {
+    "{PREZZO}": currency.format(quoteAmountCents / 100),
+    "{ACCONTO}": currency.format(depositAmountCents / 100),
+    "{SALDO}": currency.format(balanceAmountCents / 100),
+    "{DATA_SALDO}": localizedBalanceDueDate,
+  };
+  const deliveredBody = Object.entries(replacements).reduce((text,[placeholder,value]) => text.replaceAll(placeholder,value),body);
   const result = await sendQuoteEmail(item.email, subject, deliveredBody);
   if (!result.sent) return Response.json({ message: "Invio email non configurato." }, { status: 503 });
   const updated = await updateAvailabilityQuote(item.id, quoteAmountCents, subject, deliveredBody, user.email);
