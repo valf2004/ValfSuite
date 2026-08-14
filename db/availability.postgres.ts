@@ -32,6 +32,13 @@ export async function updateAvailabilityStatus(id: string, status: AvailabilityS
   return rows.map(mapRow);
 }
 
+export async function updateAvailabilityQuote(id: string, quoteAmountCents: number, quoteSubject: string, quoteBody: string) {
+  await ready();
+  const quoteSentAt = new Date().toISOString();
+  const rows = await sql`UPDATE availability_requests SET status='quote_sent',archive_outcome=NULL,quote_amount_cents=${quoteAmountCents},quote_subject=${quoteSubject},quote_body=${quoteBody},quote_sent_at=${quoteSentAt},updated_at=${quoteSentAt} WHERE id=${id} RETURNING *`;
+  return rows.map(mapRow);
+}
+
 async function initializePostgres(client: Sql) {
   await client`CREATE TABLE IF NOT EXISTS availability_requests (
     id text PRIMARY KEY,
@@ -41,6 +48,10 @@ async function initializePostgres(client: Sql) {
     privacy_accepted_at timestamptz NOT NULL,created_at timestamptz NOT NULL DEFAULT now(),updated_at timestamptz NOT NULL DEFAULT now(),
     CHECK (departure_date > arrival_date))`;
   await client`ALTER TABLE availability_requests ADD COLUMN IF NOT EXISTS archive_outcome text`;
+  await client`ALTER TABLE availability_requests ADD COLUMN IF NOT EXISTS quote_amount_cents integer`;
+  await client`ALTER TABLE availability_requests ADD COLUMN IF NOT EXISTS quote_subject text`;
+  await client`ALTER TABLE availability_requests ADD COLUMN IF NOT EXISTS quote_body text`;
+  await client`ALTER TABLE availability_requests ADD COLUMN IF NOT EXISTS quote_sent_at timestamptz`;
   await client`ALTER TABLE availability_requests DROP CONSTRAINT IF EXISTS availability_requests_status_check`;
   await client`ALTER TABLE availability_requests DROP CONSTRAINT IF EXISTS availability_requests_archive_outcome_check`;
   await client`UPDATE availability_requests SET status=CASE WHEN status='new' THEN 'quote_requested' WHEN status='contacted' THEN 'quote_sent' WHEN status='confirmed' THEN 'accepted' WHEN status='declined' THEN 'archived' ELSE status END`;
@@ -54,7 +65,7 @@ async function initializePostgres(client: Sql) {
 function mapRow(row: Record<string, unknown>): AvailabilityRecord {
   const iso=(value:unknown)=>value instanceof Date?value.toISOString():String(value);
   const date=(value:unknown)=>value instanceof Date?value.toISOString().slice(0,10):String(value).slice(0,10);
-  return {id:String(row.id),status:String(row.status) as AvailabilityStatus,archiveOutcome:row.archive_outcome?String(row.archive_outcome) as ArchiveOutcome:null,name:String(row.name),email:String(row.email),arrivalDate:date(row.arrival_date),departureDate:date(row.departure_date),guestCount:Number(row.guest_count),message:String(row.message??""),language:String(row.language),privacyAcceptedAt:iso(row.privacy_accepted_at),createdAt:iso(row.created_at),updatedAt:iso(row.updated_at)};
+  return {id:String(row.id),status:String(row.status) as AvailabilityStatus,archiveOutcome:row.archive_outcome?String(row.archive_outcome) as ArchiveOutcome:null,name:String(row.name),email:String(row.email),arrivalDate:date(row.arrival_date),departureDate:date(row.departure_date),guestCount:Number(row.guest_count),message:String(row.message??""),language:String(row.language),quoteAmountCents:row.quote_amount_cents==null?null:Number(row.quote_amount_cents),quoteSubject:row.quote_subject==null?null:String(row.quote_subject),quoteBody:row.quote_body==null?null:String(row.quote_body),quoteSentAt:row.quote_sent_at==null?null:iso(row.quote_sent_at),privacyAcceptedAt:iso(row.privacy_accepted_at),createdAt:iso(row.created_at),updatedAt:iso(row.updated_at)};
 }
 
 async function archiveCompletedStays(){await sql`UPDATE availability_requests SET status='archived',archive_outcome='completed',updated_at=now() WHERE status='police_registered' AND departure_date < CURRENT_DATE`;}

@@ -63,6 +63,18 @@ export async function updateAvailabilityStatus(id: string, status: AvailabilityS
   return rows.map(mapRow);
 }
 
+export async function updateAvailabilityQuote(id: string, quoteAmountCents: number, quoteSubject: string, quoteBody: string) {
+  const quoteSentAt = new Date().toISOString();
+  const pg = postgresClient();
+  if (!pg) {
+    const { getDb } = await import(".");
+    return getDb().update(availabilityRequests).set({ status: "quote_sent", archiveOutcome: null, quoteAmountCents, quoteSubject, quoteBody, quoteSentAt, updatedAt: quoteSentAt }).where(eq(availabilityRequests.id, id)).returning();
+  }
+  await pg.ready;
+  const rows = await pg.sql`UPDATE availability_requests SET status='quote_sent', archive_outcome=NULL, quote_amount_cents=${quoteAmountCents}, quote_subject=${quoteSubject}, quote_body=${quoteBody}, quote_sent_at=${quoteSentAt}, updated_at=${quoteSentAt} WHERE id=${id} RETURNING *`;
+  return rows.map(mapRow);
+}
+
 async function initializePostgres(sql: Sql) {
   await sql`
     CREATE TABLE IF NOT EXISTS availability_requests (
@@ -75,6 +87,10 @@ async function initializePostgres(sql: Sql) {
       guest_count integer NOT NULL CHECK (guest_count BETWEEN 1 AND 4),
       message text NOT NULL DEFAULT '',
       language text NOT NULL DEFAULT 'it',
+      quote_amount_cents integer,
+      quote_subject text,
+      quote_body text,
+      quote_sent_at timestamptz,
       privacy_accepted_at timestamptz NOT NULL,
       created_at timestamptz NOT NULL DEFAULT now(),
       updated_at timestamptz NOT NULL DEFAULT now(),
@@ -83,6 +99,10 @@ async function initializePostgres(sql: Sql) {
   `;
   await sql`CREATE INDEX IF NOT EXISTS idx_availability_requests_status_created ON availability_requests (status, created_at DESC)`;
   await sql`CREATE INDEX IF NOT EXISTS idx_availability_requests_arrival ON availability_requests (arrival_date)`;
+  await sql`ALTER TABLE availability_requests ADD COLUMN IF NOT EXISTS quote_amount_cents integer`;
+  await sql`ALTER TABLE availability_requests ADD COLUMN IF NOT EXISTS quote_subject text`;
+  await sql`ALTER TABLE availability_requests ADD COLUMN IF NOT EXISTS quote_body text`;
+  await sql`ALTER TABLE availability_requests ADD COLUMN IF NOT EXISTS quote_sent_at timestamptz`;
 }
 
 function mapRow(row: Record<string, unknown>): AvailabilityRecord {
@@ -91,7 +111,7 @@ function mapRow(row: Record<string, unknown>): AvailabilityRecord {
   return {
     id: String(row.id), status: String(row.status) as AvailabilityStatus, archiveOutcome: row.archive_outcome ? String(row.archive_outcome) as ArchiveOutcome : null, name: String(row.name), email: String(row.email),
     arrivalDate: date(row.arrival_date), departureDate: date(row.departure_date), guestCount: Number(row.guest_count),
-    message: String(row.message ?? ""), language: String(row.language), privacyAcceptedAt: iso(row.privacy_accepted_at),
+    message: String(row.message ?? ""), language: String(row.language), quoteAmountCents: row.quote_amount_cents == null ? null : Number(row.quote_amount_cents), quoteSubject: row.quote_subject == null ? null : String(row.quote_subject), quoteBody: row.quote_body == null ? null : String(row.quote_body), quoteSentAt: row.quote_sent_at == null ? null : iso(row.quote_sent_at), privacyAcceptedAt: iso(row.privacy_accepted_at),
     createdAt: iso(row.created_at), updatedAt: iso(row.updated_at),
   };
 }

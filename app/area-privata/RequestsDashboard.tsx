@@ -5,6 +5,7 @@ import { useMemo, useState } from "react";
 export type AvailabilityRequest = {
   id: string; status: Status; archiveOutcome: ArchiveOutcome | null; name: string; email: string; arrivalDate: string;
   departureDate: string; guestCount: number; message: string; language: string;
+  quoteAmountCents: number | null; quoteSubject: string | null; quoteBody: string | null; quoteSentAt: string | null;
   createdAt: string; updatedAt: string;
 };
 type Status = "quote_requested" | "quote_sent" | "accepted" | "checked_in" | "police_registered" | "archived";
@@ -37,7 +38,7 @@ export default function RequestsDashboard({ initialRequests }: { initialRequests
   }
   function openQuote(item: AvailabilityRequest) {
     const template = quoteTemplate(item);
-    setQuoteDraft({ subject:template.subject, body:template.body, price:"" });
+    setQuoteDraft({ subject:template.subject, body:template.body, price:item.quoteAmountCents == null ? "" : (item.quoteAmountCents / 100).toFixed(2).replace(".", ",") });
     setQuoteFor(item.id); setNotice("");
   }
   async function sendQuote(item: AvailabilityRequest) {
@@ -69,7 +70,7 @@ function RequestCard({item,active,busy,quoteOpen,quoteDraft,setQuoteDraft,openQu
   function changeStatus(value:string) { const [status,outcome]=value.split(":") as [Status,ArchiveOutcome?]; move(item.id,status,outcome); }
   return <article className={`request-card priority-${priority.level}`}>
     <div className="request-card-top"><div className="request-card-main"><p className="eyebrow">Ricevuta {formatDateTime(item.createdAt)}{item.archiveOutcome ? ` · ${outcomeLabel(item.archiveOutcome)}` : ""}</p><h2>{item.name}</h2><p><a href={`mailto:${item.email}`}>{item.email}</a> · {item.guestCount} {item.guestCount === 1 ? "ospite" : "ospiti"}</p></div>{active !== "archived" && <div className={`priority-badge ${priority.level}`}><small>{priority.action}</small><strong>{priority.label}</strong></div>}</div>
-    <dl><div><dt>Arrivo</dt><dd>{formatDate(item.arrivalDate)}</dd></div><div><dt>Partenza</dt><dd>{formatDate(item.departureDate)}</dd></div><div><dt>Notti</dt><dd>{nights(item.arrivalDate,item.departureDate)}</dd></div><div><dt>Lingua</dt><dd>{item.language.toUpperCase()}</dd></div></dl>
+    <dl><div><dt>Arrivo</dt><dd>{formatDate(item.arrivalDate)}</dd></div><div><dt>Partenza</dt><dd>{formatDate(item.departureDate)}</dd></div><div><dt>Notti</dt><dd>{nights(item.arrivalDate,item.departureDate)}</dd></div><div><dt>Lingua</dt><dd>{item.language.toUpperCase()}</dd></div><div><dt>Preventivo</dt><dd>{item.quoteAmountCents == null ? "Non registrato" : formatCurrency(item.quoteAmountCents)}{item.quoteSentAt && <small> · {formatDateTime(item.quoteSentAt)}</small>}</dd></div></dl>
     {item.message && <p className="request-message">“{item.message}”</p>}
     <div className="request-actions"><button className="primary-action" disabled={busy===item.id} onClick={()=>openQuote(item)}>{item.status === "quote_sent" ? "Invia nuovamente" : "Prepara preventivo"}</button><a href={`mailto:${item.email}`}>Email libera</a><label className="status-control"><span>Stato</span><select value={statusValue} disabled={busy===item.id} onChange={event=>changeStatus(event.target.value)}><option value="quote_requested">Richiesta preventivo</option><option value="quote_sent">Preventivo inviato</option><option value="accepted">Accettata</option><option value="checked_in">Check-in eseguito</option><option value="police_registered">Questura registrata</option><option value="archived:completed">Archiviata · completata</option><option value="archived:cancelled">Archiviata · annullata</option><option value="archived:unavailable">Archiviata · non disponibile</option></select></label></div>
     {quoteOpen && <form className="quote-form" onSubmit={event=>{event.preventDefault();sendQuote(item);}}><div className="quote-form-heading"><div><p className="eyebrow">Preventivo in {languageLabel(item.language)}</p><h3>Invia a {item.name}</h3></div><button type="button" className="quote-close" onClick={closeQuote} aria-label="Chiudi">×</button></div><div className="quote-grid"><label>Importo totale (€)<input type="text" inputMode="decimal" placeholder="es. 480,00" required value={quoteDraft.price} onChange={e=>setQuoteDraft({...quoteDraft,price:e.target.value})}/></label><label>Destinatario<input type="email" value={item.email} readOnly/></label><label className="field-wide">Oggetto<input required maxLength={180} value={quoteDraft.subject} onChange={e=>setQuoteDraft({...quoteDraft,subject:e.target.value})}/></label><label className="field-wide">Testo<textarea required rows={9} maxLength={6000} value={quoteDraft.body} onChange={e=>setQuoteDraft({...quoteDraft,body:e.target.value})}/><small><code>{`{PREZZO}`}</code> sarà sostituito con l’importo indicato.</small></label></div><div className="quote-actions"><button type="button" onClick={closeQuote}>Annulla</button><button className="button" disabled={busy===item.id}>{busy===item.id ? "Invio…" : "Invia preventivo"}</button></div></form>}
@@ -92,6 +93,7 @@ function quoteTemplate(item:AvailabilityRequest) {
 function languageLabel(value:string){return ({it:"italiano",en:"inglese",fr:"francese",es:"spagnolo",de:"tedesco"} as Record<string,string>)[value] || value.toUpperCase();}
 function formatDate(value:string){return new Intl.DateTimeFormat("it-IT",{day:"2-digit",month:"short",year:"numeric",timeZone:"UTC"}).format(new Date(`${value}T12:00:00Z`));}
 function formatDateTime(value:string){return new Intl.DateTimeFormat("it-IT",{day:"2-digit",month:"short",hour:"2-digit",minute:"2-digit"}).format(new Date(value));}
+function formatCurrency(value:number){return new Intl.NumberFormat("it-IT",{style:"currency",currency:"EUR"}).format(value/100);}
 function nights(arrival:string,departure:string){return Math.round((Date.parse(`${departure}T12:00:00Z`)-Date.parse(`${arrival}T12:00:00Z`))/86_400_000);}
 function outcomeLabel(value:ArchiveOutcome){return {completed:"Completata",cancelled:"Annullata",unavailable:"Mancanza disponibilità"}[value];}
 function priorityDate(item: AvailabilityRequest) {

@@ -1,5 +1,5 @@
 import { headers } from "next/headers";
-import { listAvailabilityRequests, updateAvailabilityStatus } from "../../../../db/availability";
+import { listAvailabilityRequests, updateAvailabilityQuote } from "../../../../db/availability";
 import { privateUserFromCookie } from "../../../lib/google-auth";
 import { sendQuoteEmail } from "../../../lib/availability-email";
 
@@ -17,9 +17,11 @@ export async function POST(request: Request) {
 
   const item = (await listAvailabilityRequests()).find(row => row.id === data.id);
   if (!item) return Response.json({ message: "Richiesta non trovata." }, { status: 404 });
-  const localizedPrice = new Intl.NumberFormat(item.language || "it", { style: "currency", currency: "EUR" }).format(Number(price));
-  const result = await sendQuoteEmail(item.email, subject, body.replaceAll("{PREZZO}", localizedPrice));
+  const quoteAmountCents = Math.round(Number(price) * 100);
+  const localizedPrice = new Intl.NumberFormat(item.language || "it", { style: "currency", currency: "EUR" }).format(quoteAmountCents / 100);
+  const deliveredBody = body.replaceAll("{PREZZO}", localizedPrice);
+  const result = await sendQuoteEmail(item.email, subject, deliveredBody);
   if (!result.sent) return Response.json({ message: "Invio email non configurato." }, { status: 503 });
-  const updated = await updateAvailabilityStatus(item.id, "quote_sent");
+  const updated = await updateAvailabilityQuote(item.id, quoteAmountCents, subject, deliveredBody);
   return Response.json({ request: updated[0], sentBy: user.email });
 }

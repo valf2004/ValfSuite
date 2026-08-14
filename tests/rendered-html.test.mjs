@@ -112,8 +112,20 @@ test("sends localized quotes and advances the workflow", async () => {
   assert.match(dashboard, /\{PREZZO\}/);
   assert.match(dashboard, /status-control/);
   assert.match(route, /privateUserFromCookie/);
-  assert.match(route, /updateAvailabilityStatus\(item\.id, "quote_sent"\)/);
+  assert.match(route, /updateAvailabilityQuote\(item\.id, quoteAmountCents, subject, deliveredBody\)/);
+  assert.match(dashboard, /formatCurrency\(item\.quoteAmountCents\)/);
+  assert.match(dashboard, /Non registrato/);
   assert.match(mailer, /sendQuoteEmail/);
+});
+
+test("persists the sent quote value and message history", async () => {
+  const [schema, repository, postgresRepository, migration] = await Promise.all([
+    source("db/schema.ts"), source("db/availability.ts"), source("db/availability.postgres.ts"), source("drizzle/0002_quote_history.sql"),
+  ]);
+  for (const field of ["quoteAmountCents", "quoteSubject", "quoteBody", "quoteSentAt"]) assert.match(schema, new RegExp(field));
+  assert.match(repository, /updateAvailabilityQuote/);
+  assert.match(postgresRepository, /quote_amount_cents/);
+  assert.match(migration, /quote_sent_at/);
 });
 
 test("confirms each availability request to the guest in their language", async () => {
