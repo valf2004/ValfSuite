@@ -50,6 +50,36 @@ export async function sendQuoteEmail(to: string, subject: string, body: string) 
   return { sent: true as const };
 }
 
+export async function sendAvailabilityConfirmation(data: AvailabilityEmail) {
+  const config = emailConfig();
+  if (!config) return { sent: false as const, reason: "not_configured" as const };
+  const copy = confirmationCopy(data);
+  const transport = nodemailer.createTransport({ host: config.host, port: config.port, secure: config.secure, auth: { user: config.user, pass: config.password } });
+  await transport.sendMail({
+    from: `VALF Suite <${config.user}>`,
+    to: data.email,
+    replyTo: config.user,
+    subject: copy.subject,
+    text: copy.body,
+    html: `<div style="font-family:Arial,sans-serif;color:#2f2a25;max-width:640px;line-height:1.6;white-space:pre-wrap"><h1 style="color:#164f4a;font-size:26px">${escapeHtml(copy.heading)}</h1>${escapeHtml(copy.body).replace(/\n/g,"<br>")}</div>`,
+  });
+  return { sent: true as const };
+}
+
+function confirmationCopy(data: AvailabilityEmail) {
+  const locale = ({it:"it-IT",en:"en-GB",fr:"fr-FR",es:"es-ES",de:"de-DE"} as Record<string,string>)[data.language] || "it-IT";
+  const date = (value:string) => new Intl.DateTimeFormat(locale,{day:"numeric",month:"long",year:"numeric",timeZone:"UTC"}).format(new Date(`${value}T12:00:00Z`));
+  const values = { name:data.name, arrival:date(data.arrivalDate), departure:date(data.departureDate), guests:data.guestCount, id:data.id };
+  const copies:Record<string,{subject:string;heading:string;body:string}> = {
+    it:{subject:"Abbiamo ricevuto la tua richiesta · VALF Suite",heading:"Richiesta ricevuta",body:`Gentile ${values.name},\n\nabbiamo ricevuto correttamente la tua richiesta di disponibilità per VALF Suite.\n\nArrivo: ${values.arrival}\nPartenza: ${values.departure}\nOspiti: ${values.guests}\n\nAngela verificherà la disponibilità e ti risponderà personalmente con una proposta. Questa email conferma la ricezione della richiesta, ma non costituisce ancora una prenotazione.\n\nCodice richiesta: ${values.id}\n\nUn cordiale saluto,\nAngela · VALF Suite`},
+    en:{subject:"We received your request · VALF Suite",heading:"Request received",body:`Dear ${values.name},\n\nwe have successfully received your availability request for VALF Suite.\n\nArrival: ${values.arrival}\nDeparture: ${values.departure}\nGuests: ${values.guests}\n\nAngela will check availability and reply personally with a proposal. This email confirms receipt of your request, but it is not yet a booking confirmation.\n\nRequest reference: ${values.id}\n\nKind regards,\nAngela · VALF Suite`},
+    fr:{subject:"Nous avons reçu votre demande · VALF Suite",heading:"Demande reçue",body:`Bonjour ${values.name},\n\nnous avons bien reçu votre demande de disponibilité pour VALF Suite.\n\nArrivée : ${values.arrival}\nDépart : ${values.departure}\nVoyageurs : ${values.guests}\n\nAngela vérifiera les disponibilités et vous répondra personnellement avec une proposition. Cet e-mail confirme la réception de votre demande, mais ne constitue pas encore une confirmation de réservation.\n\nRéférence de la demande : ${values.id}\n\nCordialement,\nAngela · VALF Suite`},
+    es:{subject:"Hemos recibido tu solicitud · VALF Suite",heading:"Solicitud recibida",body:`Hola ${values.name},\n\nhemos recibido correctamente tu solicitud de disponibilidad para VALF Suite.\n\nLlegada: ${values.arrival}\nSalida: ${values.departure}\nHuéspedes: ${values.guests}\n\nAngela comprobará la disponibilidad y responderá personalmente con una propuesta. Este correo confirma la recepción de la solicitud, pero todavía no constituye una reserva confirmada.\n\nReferencia de la solicitud: ${values.id}\n\nUn cordial saludo,\nAngela · VALF Suite`},
+    de:{subject:"Wir haben Ihre Anfrage erhalten · VALF Suite",heading:"Anfrage erhalten",body:`Guten Tag ${values.name},\n\nwir haben Ihre Verfügbarkeitsanfrage für die VALF Suite erfolgreich erhalten.\n\nAnreise: ${values.arrival}\nAbreise: ${values.departure}\nGäste: ${values.guests}\n\nAngela prüft die Verfügbarkeit und antwortet Ihnen persönlich mit einem Angebot. Diese E-Mail bestätigt den Eingang Ihrer Anfrage, ist jedoch noch keine Buchungsbestätigung.\n\nAnfragenummer: ${values.id}\n\nMit freundlichen Grüßen,\nAngela · VALF Suite`},
+  };
+  return copies[data.language] || copies.it;
+}
+
 function emailConfig() {
   const host = process.env["SMTP_HOST"]?.trim();
   const user = process.env["SMTP_USER"]?.trim();

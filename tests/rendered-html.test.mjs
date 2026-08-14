@@ -115,3 +115,13 @@ test("sends localized quotes and advances the workflow", async () => {
   assert.match(route, /updateAvailabilityStatus\(item\.id, "quote_sent"\)/);
   assert.match(mailer, /sendQuoteEmail/);
 });
+
+test("confirms each availability request to the guest in their language", async () => {
+  const [route, mailer] = await Promise.all([source("app/api/disponibilita/route.ts"), source("app/lib/availability-email.ts")]);
+  assert.match(route, /sendAvailabilityConfirmation/);
+  assert.match(route, /Promise\.allSettled/);
+  assert.ok(route.indexOf("createAvailabilityRequest") < route.lastIndexOf("sendAvailabilityConfirmation"));
+  assert.match(mailer, /to: data\.email/);
+  for (const language of ["it", "en", "fr", "es", "de"]) assert.match(mailer, new RegExp(`${language}:\\{subject:`));
+  assert.match(mailer, /non costituisce ancora una prenotazione/);
+});
