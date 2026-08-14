@@ -49,7 +49,6 @@ export default function RequestsDashboard({ initialRequests }: { initialRequests
     setBusy(null);
   }
   return <>
-    <section className="request-summary" aria-label="Riepilogo richieste">{tabs.slice(0,5).map(tab => <article key={tab.id}><small>{tab.label}</small><strong>{requests.filter(item => item.status === tab.id).length}</strong></article>)}</section>
     <section className="requests-panel"><div className="request-tabs" role="tablist" aria-label="Stato richiesta e prenotazione">{tabs.map(tab => <button key={tab.id} role="tab" aria-selected={active === tab.id} onClick={() => setActive(tab.id)}>{tab.label}<span>{requests.filter(item => item.status === tab.id).length}</span></button>)}</div>
       {active === "archived" && <div className="archive-filters">{([['all','Tutte'],['completed','Completate'],['cancelled','Annullate'],['unavailable','Non disponibili']] as const).map(([id,label]) => <button key={id} className={archiveFilter===id?"active":""} onClick={()=>setArchiveFilter(id)}>{label}</button>)}</div>}
       <div className="request-list-heading"><div><p className="eyebrow">Attività in ordine di priorità</p><p>Le pratiche con la scadenza più vicina sono mostrate per prime.</p></div>{active !== "archived" && <div className="priority-legend" aria-label="Legenda priorità"><span className="overdue">Scaduta</span><span className="today">Oggi</span><span className="soon">Entro 3 giorni</span></div>}</div>
