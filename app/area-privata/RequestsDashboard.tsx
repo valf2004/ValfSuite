@@ -24,7 +24,7 @@ export default function RequestsDashboard({ initialRequests }: { initialRequests
   const [archiveFilter, setArchiveFilter] = useState<"all" | ArchiveOutcome>("all");
   const [busy, setBusy] = useState<string | null>(null);
   const [notice, setNotice] = useState("");
-  const visible = useMemo(() => requests.filter(item => item.status === active && !(active === "archived" && archiveFilter !== "all" && item.archiveOutcome !== archiveFilter)), [requests, active, archiveFilter]);
+  const visible = useMemo(() => requests.filter(item => item.status === active && !(active === "archived" && archiveFilter !== "all" && item.archiveOutcome !== archiveFilter)).sort((a,b) => priorityDate(a).getTime() - priorityDate(b).getTime()), [requests, active, archiveFilter]);
   async function move(id: string, status: Status, archiveOutcome?: ArchiveOutcome) {
     setBusy(id); setNotice("");
     const response = await fetch("/api/gestione/richieste", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id, status, archiveOutcome }) });
@@ -37,9 +37,10 @@ export default function RequestsDashboard({ initialRequests }: { initialRequests
     <section className="request-summary" aria-label="Riepilogo richieste">{tabs.slice(0,5).map(tab => <article key={tab.id}><small>{tab.label}</small><strong>{requests.filter(item => item.status === tab.id).length}</strong></article>)}</section>
     <section className="requests-panel"><div className="request-tabs" role="tablist" aria-label="Stato richiesta e prenotazione">{tabs.map(tab => <button key={tab.id} role="tab" aria-selected={active === tab.id} onClick={() => setActive(tab.id)}>{tab.label}<span>{requests.filter(item => item.status === tab.id).length}</span></button>)}</div>
       {active === "archived" && <div className="archive-filters">{([['all','Tutte'],['completed','Completate'],['cancelled','Annullate'],['unavailable','Non disponibili']] as const).map(([id,label]) => <button key={id} className={archiveFilter===id?"active":""} onClick={()=>setArchiveFilter(id)}>{label}</button>)}</div>}
+      <div className="request-list-heading"><div><p className="eyebrow">Attività in ordine di priorità</p><p>Le pratiche con la scadenza più vicina sono mostrate per prime.</p></div>{active !== "archived" && <div className="priority-legend" aria-label="Legenda priorità"><span className="overdue">Scaduta</span><span className="today">Oggi</span><span className="soon">Entro 3 giorni</span></div>}</div>
       <p className="dashboard-notice" role="status">{notice}</p><div className="request-list" role="tabpanel">
         {!visible.length && <p className="request-empty">{tabs.find(tab => tab.id === active)?.empty}</p>}
-        {visible.map(item => <article className="request-card" key={item.id}><div className="request-card-main"><p className="eyebrow">Ricevuta {formatDateTime(item.createdAt)}{item.archiveOutcome ? ` · ${outcomeLabel(item.archiveOutcome)}` : ""}</p><h2>{item.name}</h2><p><a href={`mailto:${item.email}`}>{item.email}</a> · {item.guestCount} {item.guestCount === 1 ? "ospite" : "ospiti"}</p></div>
+        {visible.map(item => <article className={`request-card priority-${getPriority(item).level}`} key={item.id}><div className="request-card-top"><div className="request-card-main"><p className="eyebrow">Ricevuta {formatDateTime(item.createdAt)}{item.archiveOutcome ? ` · ${outcomeLabel(item.archiveOutcome)}` : ""}</p><h2>{item.name}</h2><p><a href={`mailto:${item.email}`}>{item.email}</a> · {item.guestCount} {item.guestCount === 1 ? "ospite" : "ospiti"}</p></div>{active !== "archived" && <div className={`priority-badge ${getPriority(item).level}`}><small>{getPriority(item).action}</small><strong>{getPriority(item).label}</strong></div>}</div>
           <dl><div><dt>Arrivo</dt><dd>{formatDate(item.arrivalDate)}</dd></div><div><dt>Partenza</dt><dd>{formatDate(item.departureDate)}</dd></div><div><dt>Notti</dt><dd>{nights(item.arrivalDate,item.departureDate)}</dd></div><div><dt>Lingua</dt><dd>{item.language.toUpperCase()}</dd></div></dl>
           {item.message && <p className="request-message">“{item.message}”</p>}<div className="request-actions"><a href={`mailto:${item.email}?subject=${encodeURIComponent("Richiesta disponibilità VALF Suite")}`}>Rispondi via email</a>{active==="quote_requested"&&<button disabled={busy===item.id} onClick={()=>move(item.id,"quote_sent")}>Preventivo inviato</button>}{active==="quote_sent"&&<button disabled={busy===item.id} onClick={()=>move(item.id,"accepted")}>Prenotazione accettata</button>}{active==="accepted"&&<button disabled={busy===item.id} onClick={()=>move(item.id,"checked_in")}>Check-in eseguito</button>}{active==="checked_in"&&<button disabled={busy===item.id} onClick={()=>move(item.id,"police_registered")}>Registrazione Questura eseguita</button>}{active!=="archived"&&<><button disabled={busy===item.id} onClick={()=>move(item.id,"archived","cancelled")}>Annulla</button><button disabled={busy===item.id} onClick={()=>move(item.id,"archived","unavailable")}>Non disponibile</button></>}</div></article>)}
       </div></section>
@@ -49,3 +50,24 @@ function formatDate(value:string){return new Intl.DateTimeFormat("it-IT",{day:"2
 function formatDateTime(value:string){return new Intl.DateTimeFormat("it-IT",{day:"2-digit",month:"short",hour:"2-digit",minute:"2-digit"}).format(new Date(value));}
 function nights(arrival:string,departure:string){return Math.round((Date.parse(`${departure}T12:00:00Z`)-Date.parse(`${arrival}T12:00:00Z`))/86_400_000);}
 function outcomeLabel(value:ArchiveOutcome){return {completed:"Completata",cancelled:"Annullata",unavailable:"Mancanza disponibilità"}[value];}
+function priorityDate(item: AvailabilityRequest) {
+  if (item.status === "quote_requested") return new Date(item.createdAt);
+  if (item.status === "police_registered") return new Date(`${item.departureDate}T12:00:00`);
+  if (item.status === "archived") return new Date(item.updatedAt);
+  return new Date(`${item.arrivalDate}T12:00:00`);
+}
+function getPriority(item: AvailabilityRequest) {
+  const action = ({ quote_requested:"Preparare il preventivo", quote_sent:"Verificare la conferma", accepted:"Completare il check-in", checked_in:"Registrare in Questura", police_registered:"Chiudere il soggiorno", archived:"Archiviata" } as const)[item.status];
+  if (item.status === "quote_requested") {
+    const hours = Math.max(0, Math.floor((Date.now() - new Date(item.createdAt).getTime()) / 3_600_000));
+    if (hours >= 24) return { level:"overdue", label:`In attesa da ${Math.floor(hours/24)} g`, action };
+    if (hours >= 4) return { level:"today", label:`In attesa da ${hours} h`, action };
+    return { level:"soon", label:"Nuova richiesta", action };
+  }
+  const target = priorityDate(item); const today = new Date(); today.setHours(0,0,0,0); target.setHours(0,0,0,0);
+  const days = Math.round((target.getTime() - today.getTime()) / 86_400_000);
+  if (days < 0) return { level:"overdue", label:`Scaduta da ${Math.abs(days)} g`, action };
+  if (days === 0) return { level:"today", label:"Da fare oggi", action };
+  if (days <= 3) return { level:"soon", label:`Tra ${days} g`, action };
+  return { level:"planned", label:formatDate(item.status === "police_registered" ? item.departureDate : item.arrivalDate), action };
+}
