@@ -125,6 +125,8 @@ test("stores and displays the complete request timeline", async () => {
   assert.match(dashboard,/Apri cronologia/);
   assert.doesNotMatch(dashboard,/>Dettagli</);
   assert.match(dashboard,/request-timeline/);
+  assert.match(dashboard,/sort\(compareStayPeriod\)/);
+  assert.match(dashboard,/arrivalDate\.localeCompare\(b\.arrivalDate\)/);
   assert.match(dashboard,/status-modal/);
   assert.match(dashboard,/testo completo di un’email/);
   assert.doesNotMatch(dashboard,/className="request-message"/);

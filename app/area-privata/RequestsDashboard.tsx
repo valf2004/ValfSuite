@@ -29,7 +29,7 @@ export default function RequestsDashboard({ initialRequests, initialEvents }: { 
   const [notice, setNotice] = useState("");
   const [quoteFor, setQuoteFor] = useState<string | null>(null);
   const [quoteDraft, setQuoteDraft] = useState({ subject:"", body:"", price:"" });
-  const visible = useMemo(() => requests.filter(item => item.status === active && !(active === "archived" && archiveFilter !== "all" && item.archiveOutcome !== archiveFilter)).sort((a,b) => priorityDate(a).getTime() - priorityDate(b).getTime()), [requests, active, archiveFilter]);
+  const visible = useMemo(() => requests.filter(item => item.status === active && !(active === "archived" && archiveFilter !== "all" && item.archiveOutcome !== archiveFilter)).sort(compareStayPeriod), [requests, active, archiveFilter]);
   async function move(id: string, status: Status, archiveOutcome?: ArchiveOutcome, note?:string) {
     setBusy(id); setNotice("");
     const response = await fetch("/api/gestione/richieste", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id, status, archiveOutcome, note }) });
@@ -100,6 +100,7 @@ function formatDateTime(value:string){return new Intl.DateTimeFormat("it-IT",{da
 function formatCurrency(value:number){return new Intl.NumberFormat("it-IT",{style:"currency",currency:"EUR"}).format(value/100);}
 function nights(arrival:string,departure:string){return Math.round((Date.parse(`${departure}T12:00:00Z`)-Date.parse(`${arrival}T12:00:00Z`))/86_400_000);}
 function outcomeLabel(value:ArchiveOutcome){return {completed:"Completata",cancelled:"Annullata",unavailable:"Mancanza disponibilità"}[value];}
+function compareStayPeriod(a:AvailabilityRequest,b:AvailabilityRequest){return a.arrivalDate.localeCompare(b.arrivalDate)||a.departureDate.localeCompare(b.departureDate)||a.name.localeCompare(b.name,"it");}
 function statusLabel(value:string){return ({quote_requested:"Richiesta preventivo",quote_sent:"Preventivo inviato",accepted:"Accettata",checked_in:"Check-in eseguito",police_registered:"Questura registrata",archived:"Archiviata"} as Record<string,string>)[value]||value;}
 function eventTitle(event:AvailabilityEvent){if(event.eventType==="request_created")return "Richiesta ricevuta";if(event.eventType==="email_sent")return event.amountCents!=null?"Preventivo inviato":"Email inviata";return `${event.fromStatus?statusLabel(event.fromStatus)+" → ":""}${statusLabel(event.toStatus||"")}`;}
 function priorityDate(item: AvailabilityRequest) {
