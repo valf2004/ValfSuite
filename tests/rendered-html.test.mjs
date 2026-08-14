@@ -101,3 +101,17 @@ test("notifies the four administrators after persistence", async () => {
   assert.match(mailer, /replyTo: data\.email/);
   assert.match(mailer, /SMTP_APP_PASSWORD/);
 });
+
+test("sends localized quotes and advances the workflow", async () => {
+  const [dashboard, route, mailer] = await Promise.all([
+    source("app/area-privata/RequestsDashboard.tsx"),
+    source("app/api/gestione/preventivo/route.ts"),
+    source("app/lib/availability-email.ts"),
+  ]);
+  for (const language of ["it", "en", "fr", "es", "de"]) assert.match(dashboard, new RegExp(`${language}:\\{subject:`));
+  assert.match(dashboard, /\{PREZZO\}/);
+  assert.match(dashboard, /status-control/);
+  assert.match(route, /privateUserFromCookie/);
+  assert.match(route, /updateAvailabilityStatus\(item\.id, "quote_sent"\)/);
+  assert.match(mailer, /sendQuoteEmail/);
+});

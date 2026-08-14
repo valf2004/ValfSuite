@@ -24,6 +24,8 @@ export default function RequestsDashboard({ initialRequests }: { initialRequests
   const [archiveFilter, setArchiveFilter] = useState<"all" | ArchiveOutcome>("all");
   const [busy, setBusy] = useState<string | null>(null);
   const [notice, setNotice] = useState("");
+  const [quoteFor, setQuoteFor] = useState<string | null>(null);
+  const [quoteDraft, setQuoteDraft] = useState({ subject:"", body:"", price:"" });
   const visible = useMemo(() => requests.filter(item => item.status === active && !(active === "archived" && archiveFilter !== "all" && item.archiveOutcome !== archiveFilter)).sort((a,b) => priorityDate(a).getTime() - priorityDate(b).getTime()), [requests, active, archiveFilter]);
   async function move(id: string, status: Status, archiveOutcome?: ArchiveOutcome) {
     setBusy(id); setNotice("");
@@ -33,6 +35,19 @@ export default function RequestsDashboard({ initialRequests }: { initialRequests
     else setNotice(data.message || "Aggiornamento non riuscito.");
     setBusy(null);
   }
+  function openQuote(item: AvailabilityRequest) {
+    const template = quoteTemplate(item);
+    setQuoteDraft({ subject:template.subject, body:template.body, price:"" });
+    setQuoteFor(item.id); setNotice("");
+  }
+  async function sendQuote(item: AvailabilityRequest) {
+    setBusy(item.id); setNotice("");
+    const response = await fetch("/api/gestione/preventivo", { method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({ id:item.id, ...quoteDraft }) });
+    const data = await response.json().catch(() => ({}));
+    if (response.ok) { setRequests(current => current.map(row => row.id === item.id ? data.request : row)); setQuoteFor(null); setNotice(`Preventivo inviato a ${item.email}.`); }
+    else setNotice(data.message || "Invio del preventivo non riuscito.");
+    setBusy(null);
+  }
   return <>
     <section className="request-summary" aria-label="Riepilogo richieste">{tabs.slice(0,5).map(tab => <article key={tab.id}><small>{tab.label}</small><strong>{requests.filter(item => item.status === tab.id).length}</strong></article>)}</section>
     <section className="requests-panel"><div className="request-tabs" role="tablist" aria-label="Stato richiesta e prenotazione">{tabs.map(tab => <button key={tab.id} role="tab" aria-selected={active === tab.id} onClick={() => setActive(tab.id)}>{tab.label}<span>{requests.filter(item => item.status === tab.id).length}</span></button>)}</div>
@@ -40,12 +55,42 @@ export default function RequestsDashboard({ initialRequests }: { initialRequests
       <div className="request-list-heading"><div><p className="eyebrow">Attività in ordine di priorità</p><p>Le pratiche con la scadenza più vicina sono mostrate per prime.</p></div>{active !== "archived" && <div className="priority-legend" aria-label="Legenda priorità"><span className="overdue">Scaduta</span><span className="today">Oggi</span><span className="soon">Entro 3 giorni</span></div>}</div>
       <p className="dashboard-notice" role="status">{notice}</p><div className="request-list" role="tabpanel">
         {!visible.length && <p className="request-empty">{tabs.find(tab => tab.id === active)?.empty}</p>}
-        {visible.map(item => <article className={`request-card priority-${getPriority(item).level}`} key={item.id}><div className="request-card-top"><div className="request-card-main"><p className="eyebrow">Ricevuta {formatDateTime(item.createdAt)}{item.archiveOutcome ? ` · ${outcomeLabel(item.archiveOutcome)}` : ""}</p><h2>{item.name}</h2><p><a href={`mailto:${item.email}`}>{item.email}</a> · {item.guestCount} {item.guestCount === 1 ? "ospite" : "ospiti"}</p></div>{active !== "archived" && <div className={`priority-badge ${getPriority(item).level}`}><small>{getPriority(item).action}</small><strong>{getPriority(item).label}</strong></div>}</div>
-          <dl><div><dt>Arrivo</dt><dd>{formatDate(item.arrivalDate)}</dd></div><div><dt>Partenza</dt><dd>{formatDate(item.departureDate)}</dd></div><div><dt>Notti</dt><dd>{nights(item.arrivalDate,item.departureDate)}</dd></div><div><dt>Lingua</dt><dd>{item.language.toUpperCase()}</dd></div></dl>
-          {item.message && <p className="request-message">“{item.message}”</p>}<div className="request-actions"><a href={`mailto:${item.email}?subject=${encodeURIComponent("Richiesta disponibilità VALF Suite")}`}>Rispondi via email</a>{active==="quote_requested"&&<button disabled={busy===item.id} onClick={()=>move(item.id,"quote_sent")}>Preventivo inviato</button>}{active==="quote_sent"&&<button disabled={busy===item.id} onClick={()=>move(item.id,"accepted")}>Prenotazione accettata</button>}{active==="accepted"&&<button disabled={busy===item.id} onClick={()=>move(item.id,"checked_in")}>Check-in eseguito</button>}{active==="checked_in"&&<button disabled={busy===item.id} onClick={()=>move(item.id,"police_registered")}>Registrazione Questura eseguita</button>}{active!=="archived"&&<><button disabled={busy===item.id} onClick={()=>move(item.id,"archived","cancelled")}>Annulla</button><button disabled={busy===item.id} onClick={()=>move(item.id,"archived","unavailable")}>Non disponibile</button></>}</div></article>)}
+        {visible.map(item => <RequestCard key={item.id} item={item} active={active} busy={busy} quoteOpen={quoteFor===item.id} quoteDraft={quoteDraft} setQuoteDraft={setQuoteDraft} openQuote={openQuote} closeQuote={()=>setQuoteFor(null)} sendQuote={sendQuote} move={move}/>) }
       </div></section>
   </>;
 }
+
+function RequestCard({item,active,busy,quoteOpen,quoteDraft,setQuoteDraft,openQuote,closeQuote,sendQuote,move}:{
+  item:AvailabilityRequest; active:Status; busy:string|null; quoteOpen:boolean; quoteDraft:{subject:string;body:string;price:string};
+  setQuoteDraft:(value:{subject:string;body:string;price:string})=>void; openQuote:(item:AvailabilityRequest)=>void; closeQuote:()=>void;
+  sendQuote:(item:AvailabilityRequest)=>void; move:(id:string,status:Status,outcome?:ArchiveOutcome)=>void;
+}) {
+  const priority=getPriority(item);
+  const statusValue=item.status === "archived" ? `archived:${item.archiveOutcome || "completed"}` : item.status;
+  function changeStatus(value:string) { const [status,outcome]=value.split(":") as [Status,ArchiveOutcome?]; move(item.id,status,outcome); }
+  return <article className={`request-card priority-${priority.level}`}>
+    <div className="request-card-top"><div className="request-card-main"><p className="eyebrow">Ricevuta {formatDateTime(item.createdAt)}{item.archiveOutcome ? ` · ${outcomeLabel(item.archiveOutcome)}` : ""}</p><h2>{item.name}</h2><p><a href={`mailto:${item.email}`}>{item.email}</a> · {item.guestCount} {item.guestCount === 1 ? "ospite" : "ospiti"}</p></div>{active !== "archived" && <div className={`priority-badge ${priority.level}`}><small>{priority.action}</small><strong>{priority.label}</strong></div>}</div>
+    <dl><div><dt>Arrivo</dt><dd>{formatDate(item.arrivalDate)}</dd></div><div><dt>Partenza</dt><dd>{formatDate(item.departureDate)}</dd></div><div><dt>Notti</dt><dd>{nights(item.arrivalDate,item.departureDate)}</dd></div><div><dt>Lingua</dt><dd>{item.language.toUpperCase()}</dd></div></dl>
+    {item.message && <p className="request-message">“{item.message}”</p>}
+    <div className="request-actions"><button className="primary-action" disabled={busy===item.id} onClick={()=>openQuote(item)}>{item.status === "quote_sent" ? "Invia nuovamente" : "Prepara preventivo"}</button><a href={`mailto:${item.email}`}>Email libera</a><label className="status-control"><span>Stato</span><select value={statusValue} disabled={busy===item.id} onChange={event=>changeStatus(event.target.value)}><option value="quote_requested">Richiesta preventivo</option><option value="quote_sent">Preventivo inviato</option><option value="accepted">Accettata</option><option value="checked_in">Check-in eseguito</option><option value="police_registered">Questura registrata</option><option value="archived:completed">Archiviata · completata</option><option value="archived:cancelled">Archiviata · annullata</option><option value="archived:unavailable">Archiviata · non disponibile</option></select></label></div>
+    {quoteOpen && <form className="quote-form" onSubmit={event=>{event.preventDefault();sendQuote(item);}}><div className="quote-form-heading"><div><p className="eyebrow">Preventivo in {languageLabel(item.language)}</p><h3>Invia a {item.name}</h3></div><button type="button" className="quote-close" onClick={closeQuote} aria-label="Chiudi">×</button></div><div className="quote-grid"><label>Importo totale (€)<input type="text" inputMode="decimal" placeholder="es. 480,00" required value={quoteDraft.price} onChange={e=>setQuoteDraft({...quoteDraft,price:e.target.value})}/></label><label>Destinatario<input type="email" value={item.email} readOnly/></label><label className="field-wide">Oggetto<input required maxLength={180} value={quoteDraft.subject} onChange={e=>setQuoteDraft({...quoteDraft,subject:e.target.value})}/></label><label className="field-wide">Testo<textarea required rows={9} maxLength={6000} value={quoteDraft.body} onChange={e=>setQuoteDraft({...quoteDraft,body:e.target.value})}/><small><code>{`{PREZZO}`}</code> sarà sostituito con l’importo indicato.</small></label></div><div className="quote-actions"><button type="button" onClick={closeQuote}>Annulla</button><button className="button" disabled={busy===item.id}>{busy===item.id ? "Invio…" : "Invia preventivo"}</button></div></form>}
+  </article>;
+}
+
+function quoteTemplate(item:AvailabilityRequest) {
+  const locale=({it:"it-IT",en:"en-GB",fr:"fr-FR",es:"es-ES",de:"de-DE"} as Record<string,string>)[item.language] || "it-IT";
+  const date=(value:string)=>new Intl.DateTimeFormat(locale,{day:"numeric",month:"long",year:"numeric",timeZone:"UTC"}).format(new Date(`${value}T12:00:00Z`));
+  const data={name:item.name,arrival:date(item.arrivalDate),departure:date(item.departureDate),guests:item.guestCount,nights:nights(item.arrivalDate,item.departureDate)};
+  const templates:Record<string,{subject:string;body:string}>={
+    it:{subject:"La tua proposta di soggiorno a VALF Suite",body:`Gentile ${data.name},\n\nsiamo lieti di confermare la disponibilità di VALF Suite dal ${data.arrival} al ${data.departure}, per ${data.guests} ospiti (${data.nights} notti).\n\nIl prezzo complessivo del soggiorno è di {PREZZO}.\n\nLa proposta è soggetta a disponibilità fino alla conferma. Per accettarla, rispondi a questa email: ti invieremo le indicazioni per completare la prenotazione.\n\nRestiamo a disposizione per qualsiasi informazione.\n\nUn cordiale saluto,\nAngela · VALF Suite`},
+    en:{subject:"Your stay proposal at VALF Suite",body:`Dear ${data.name},\n\nwe are pleased to confirm availability at VALF Suite from ${data.arrival} to ${data.departure}, for ${data.guests} guests (${data.nights} nights).\n\nThe total price for the stay is {PREZZO}.\n\nThis proposal is subject to availability until confirmed. To accept it, simply reply to this email and we will send you the instructions to complete your booking.\n\nPlease feel free to contact us for any further information.\n\nKind regards,\nAngela · VALF Suite`},
+    fr:{subject:"Votre proposition de séjour à VALF Suite",body:`Bonjour ${data.name},\n\nnous avons le plaisir de confirmer la disponibilité de VALF Suite du ${data.arrival} au ${data.departure}, pour ${data.guests} personnes (${data.nights} nuits).\n\nLe prix total du séjour est de {PREZZO}.\n\nCette proposition reste soumise à disponibilité jusqu’à sa confirmation. Pour l’accepter, répondez simplement à cet e-mail; nous vous enverrons les instructions pour finaliser la réservation.\n\nNous restons à votre disposition.\n\nCordialement,\nAngela · VALF Suite`},
+    es:{subject:"Tu propuesta de estancia en VALF Suite",body:`Hola ${data.name},\n\nnos complace confirmar la disponibilidad de VALF Suite del ${data.arrival} al ${data.departure}, para ${data.guests} huéspedes (${data.nights} noches).\n\nEl precio total de la estancia es de {PREZZO}.\n\nEsta propuesta está sujeta a disponibilidad hasta su confirmación. Para aceptarla, responde a este correo y te enviaremos las instrucciones para completar la reserva.\n\nQuedamos a tu disposición.\n\nUn cordial saludo,\nAngela · VALF Suite`},
+    de:{subject:"Ihr Aufenthaltsangebot für VALF Suite",body:`Guten Tag ${data.name},\n\ngerne bestätigen wir die Verfügbarkeit der VALF Suite vom ${data.arrival} bis zum ${data.departure}, für ${data.guests} Gäste (${data.nights} Nächte).\n\nDer Gesamtpreis für den Aufenthalt beträgt {PREZZO}.\n\nDieses Angebot gilt vorbehaltlich der Verfügbarkeit bis zur Bestätigung. Antworten Sie zur Annahme einfach auf diese E-Mail; anschließend senden wir Ihnen die Informationen zum Abschluss der Buchung.\n\nFür Rückfragen stehen wir gerne zur Verfügung.\n\nMit freundlichen Grüßen,\nAngela · VALF Suite`},
+  };
+  return templates[item.language] || templates.it;
+}
+function languageLabel(value:string){return ({it:"italiano",en:"inglese",fr:"francese",es:"spagnolo",de:"tedesco"} as Record<string,string>)[value] || value.toUpperCase();}
 function formatDate(value:string){return new Intl.DateTimeFormat("it-IT",{day:"2-digit",month:"short",year:"numeric",timeZone:"UTC"}).format(new Date(`${value}T12:00:00Z`));}
 function formatDateTime(value:string){return new Intl.DateTimeFormat("it-IT",{day:"2-digit",month:"short",hour:"2-digit",minute:"2-digit"}).format(new Date(value));}
 function nights(arrival:string,departure:string){return Math.round((Date.parse(`${departure}T12:00:00Z`)-Date.parse(`${arrival}T12:00:00Z`))/86_400_000);}

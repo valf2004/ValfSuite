@@ -35,6 +35,21 @@ export async function sendAvailabilityNotification(data: AvailabilityEmail) {
   return { sent: true as const };
 }
 
+export async function sendQuoteEmail(to: string, subject: string, body: string) {
+  const config = emailConfig();
+  if (!config) return { sent: false as const, reason: "not_configured" as const };
+  const transport = nodemailer.createTransport({ host: config.host, port: config.port, secure: config.secure, auth: { user: config.user, pass: config.password } });
+  await transport.sendMail({
+    from: `VALF Suite <${config.user}>`,
+    to,
+    replyTo: config.user,
+    subject,
+    text: body,
+    html: `<div style="font-family:Arial,sans-serif;color:#2f2a25;max-width:640px;line-height:1.6;white-space:pre-wrap">${escapeHtml(body)}</div>`,
+  });
+  return { sent: true as const };
+}
+
 function emailConfig() {
   const host = process.env["SMTP_HOST"]?.trim();
   const user = process.env["SMTP_USER"]?.trim();
