@@ -23,6 +23,9 @@
 .checkin-form legend { font:500 42px/1.1 'Cormorant Garamond',serif; color:var(--brown); margin-bottom:8px; }
 .form-help { color:#76685d; margin:0 0 34px; max-width:650px; }
 .form-error { margin:0 0 28px; padding:15px 18px; border-left:4px solid #a03e32; background:#fbebe8; color:#7a2d25; font-weight:600; }
+.checkin-grid label.field-error { color:#9d2f24; }
+.checkin-form .field-error input { border:2px solid #b83d31; background:#fff7f6; box-shadow:0 0 0 3px rgba(184,61,49,.12); color:#5f211b; }
+.checkin-form .field-error input:focus { outline:2px solid #b83d31; outline-offset:2px; }
 .checkin-grid { display:grid; grid-template-columns:1fr 1fr; gap:0 24px; }
 .checkin-grid label { margin-bottom:24px; }
 .checkin-form input,.checkin-form select { min-height:48px; }
