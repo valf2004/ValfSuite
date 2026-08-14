@@ -19,8 +19,7 @@ function PrivateLogin({configured}:{configured:boolean}) {
 
 function PrivateDashboard({user,requests}:{user:{email:string;name:string;picture?:string};requests:AvailabilityRecord[]}) {
   return <main className="dashboard-page">
-    <header className="dashboard-header"><a href="/"><img src="/logo-valf-suite.png" alt="VALF Suite"/></a><div className="private-account"><span><strong>{user.name}</strong><small>{user.email}</small></span><a href="/api/auth/logout">Esci</a></div></header>
-    <section className="dashboard-title"><p className="eyebrow">Area riservata · Gestione soggiorni</p></section>
+    <header className="dashboard-header"><div className="dashboard-brand"><a href="/"><img src="/logo-valf-suite.png" alt="VALF Suite"/></a><p>Area riservata <span>· Gestione soggiorni</span></p></div><div className="private-account"><span><strong>{user.name}</strong><small>{user.email}</small></span><a href="/api/auth/logout">Esci</a></div></header>
     <RequestsDashboard initialRequests={requests}/>
   </main>;
 }
