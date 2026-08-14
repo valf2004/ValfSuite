@@ -8,6 +8,7 @@ export type AvailabilityRequest = {
   quoteAmountCents: number | null; quoteSubject: string | null; quoteBody: string | null; quoteSentAt: string | null;
   createdAt: string; updatedAt: string;
 };
+export type AvailabilityEvent = { id:string; requestId:string; eventType:"request_created"|"email_sent"|"status_changed"; fromStatus:string|null; toStatus:string|null; actorEmail:string|null; note:string|null; subject:string|null; body:string|null; amountCents:number|null; createdAt:string };
 type Status = "quote_requested" | "quote_sent" | "accepted" | "checked_in" | "police_registered" | "archived";
 type ArchiveOutcome = "completed" | "cancelled" | "unavailable";
 const tabs: { id: Status; label: string; empty: string }[] = [
@@ -19,8 +20,9 @@ const tabs: { id: Status; label: string; empty: string }[] = [
   { id: "archived", label: "Archiviate", empty: "L’archivio è vuoto." },
 ];
 
-export default function RequestsDashboard({ initialRequests }: { initialRequests: AvailabilityRequest[] }) {
+export default function RequestsDashboard({ initialRequests, initialEvents }: { initialRequests: AvailabilityRequest[]; initialEvents:AvailabilityEvent[] }) {
   const [requests, setRequests] = useState(initialRequests);
+  const [events, setEvents] = useState(initialEvents);
   const [active, setActive] = useState<Status>("quote_requested");
   const [archiveFilter, setArchiveFilter] = useState<"all" | ArchiveOutcome>("all");
   const [busy, setBusy] = useState<string | null>(null);
@@ -28,11 +30,11 @@ export default function RequestsDashboard({ initialRequests }: { initialRequests
   const [quoteFor, setQuoteFor] = useState<string | null>(null);
   const [quoteDraft, setQuoteDraft] = useState({ subject:"", body:"", price:"" });
   const visible = useMemo(() => requests.filter(item => item.status === active && !(active === "archived" && archiveFilter !== "all" && item.archiveOutcome !== archiveFilter)).sort((a,b) => priorityDate(a).getTime() - priorityDate(b).getTime()), [requests, active, archiveFilter]);
-  async function move(id: string, status: Status, archiveOutcome?: ArchiveOutcome) {
+  async function move(id: string, status: Status, archiveOutcome?: ArchiveOutcome, note?:string) {
     setBusy(id); setNotice("");
-    const response = await fetch("/api/gestione/richieste", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id, status, archiveOutcome }) });
+    const response = await fetch("/api/gestione/richieste", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id, status, archiveOutcome, note }) });
     const data = await response.json().catch(() => ({}));
-    if (response.ok) { setRequests(current => current.map(item => item.id === id ? data.request : item)); setNotice("Stato aggiornato."); }
+    if (response.ok) { setRequests(current => current.map(item => item.id === id ? data.request : item)); if(data.event)setEvents(current=>[...current,data.event]); setNotice("Stato aggiornato."); }
     else setNotice(data.message || "Aggiornamento non riuscito.");
     setBusy(null);
   }
@@ -45,34 +47,38 @@ export default function RequestsDashboard({ initialRequests }: { initialRequests
     setBusy(item.id); setNotice("");
     const response = await fetch("/api/gestione/preventivo", { method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({ id:item.id, ...quoteDraft }) });
     const data = await response.json().catch(() => ({}));
-    if (response.ok) { setRequests(current => current.map(row => row.id === item.id ? data.request : row)); setQuoteFor(null); setNotice(`Preventivo inviato a ${item.email}.`); }
+    if (response.ok) { setRequests(current => current.map(row => row.id === item.id ? data.request : row)); if(data.event)setEvents(current=>[...current,data.event]); setQuoteFor(null); setNotice(`Preventivo inviato a ${item.email}.`); }
     else setNotice(data.message || "Invio del preventivo non riuscito.");
     setBusy(null);
   }
   return <>
     <section className="requests-panel"><div className="request-tabs" role="tablist" aria-label="Stato richiesta e prenotazione">{tabs.map(tab => <button key={tab.id} role="tab" aria-selected={active === tab.id} onClick={() => setActive(tab.id)}>{tab.label}<span>{requests.filter(item => item.status === tab.id).length}</span></button>)}</div>
       {active === "archived" && <div className="archive-filters">{([['all','Tutte'],['completed','Completate'],['cancelled','Annullate'],['unavailable','Non disponibili']] as const).map(([id,label]) => <button key={id} className={archiveFilter===id?"active":""} onClick={()=>setArchiveFilter(id)}>{label}</button>)}</div>}
-      <div className="request-list-heading"><div><p className="eyebrow">Attività in ordine di priorità</p><p>Le pratiche con la scadenza più vicina sono mostrate per prime.</p></div>{active !== "archived" && <div className="priority-legend" aria-label="Legenda priorità"><span className="overdue">Scaduta</span><span className="today">Oggi</span><span className="soon">Entro 3 giorni</span></div>}</div>
       <p className="dashboard-notice" role="status">{notice}</p><div className="request-list" role="tabpanel">
         {!visible.length && <p className="request-empty">{tabs.find(tab => tab.id === active)?.empty}</p>}
-        {visible.map(item => <RequestCard key={item.id} item={item} active={active} busy={busy} quoteOpen={quoteFor===item.id} quoteDraft={quoteDraft} setQuoteDraft={setQuoteDraft} openQuote={openQuote} closeQuote={()=>setQuoteFor(null)} sendQuote={sendQuote} move={move}/>) }
+        {visible.map(item => <RequestCard key={item.id} item={item} events={events.filter(event=>event.requestId===item.id)} active={active} busy={busy} quoteOpen={quoteFor===item.id} quoteDraft={quoteDraft} setQuoteDraft={setQuoteDraft} openQuote={openQuote} closeQuote={()=>setQuoteFor(null)} sendQuote={sendQuote} move={move}/>) }
       </div></section>
   </>;
 }
 
-function RequestCard({item,active,busy,quoteOpen,quoteDraft,setQuoteDraft,openQuote,closeQuote,sendQuote,move}:{
-  item:AvailabilityRequest; active:Status; busy:string|null; quoteOpen:boolean; quoteDraft:{subject:string;body:string;price:string};
+function RequestCard({item,events,active,busy,quoteOpen,quoteDraft,setQuoteDraft,openQuote,closeQuote,sendQuote,move}:{
+  item:AvailabilityRequest; events:AvailabilityEvent[]; active:Status; busy:string|null; quoteOpen:boolean; quoteDraft:{subject:string;body:string;price:string};
   setQuoteDraft:(value:{subject:string;body:string;price:string})=>void; openQuote:(item:AvailabilityRequest)=>void; closeQuote:()=>void;
-  sendQuote:(item:AvailabilityRequest)=>void; move:(id:string,status:Status,outcome?:ArchiveOutcome)=>void;
+  sendQuote:(item:AvailabilityRequest)=>void; move:(id:string,status:Status,outcome?:ArchiveOutcome,note?:string)=>void;
 }) {
+  const [expanded,setExpanded]=useState(false);
+  const [operatorNote,setOperatorNote]=useState("");
   const priority=getPriority(item);
   const statusValue=item.status === "archived" ? `archived:${item.archiveOutcome || "completed"}` : item.status;
-  function changeStatus(value:string) { const [status,outcome]=value.split(":") as [Status,ArchiveOutcome?]; move(item.id,status,outcome); }
+  const [selectedStatus,setSelectedStatus]=useState(statusValue);
+  function changeStatus() { const [status,outcome]=selectedStatus.split(":") as [Status,ArchiveOutcome?]; move(item.id,status,outcome,operatorNote); setOperatorNote(""); }
   return <article className={`request-card priority-${priority.level}`}>
-    <div className="request-card-top"><div className="request-card-main"><p className="eyebrow">Ricevuta {formatDateTime(item.createdAt)}{item.archiveOutcome ? ` · ${outcomeLabel(item.archiveOutcome)}` : ""}</p><h2>{item.name}</h2><p><a href={`mailto:${item.email}`}>{item.email}</a> · {item.guestCount} {item.guestCount === 1 ? "ospite" : "ospiti"}</p></div>{active !== "archived" && <div className={`priority-badge ${priority.level}`}><small>{priority.action}</small><strong>{priority.label}</strong></div>}</div>
-    <dl><div><dt>Arrivo</dt><dd>{formatDate(item.arrivalDate)}</dd></div><div><dt>Partenza</dt><dd>{formatDate(item.departureDate)}</dd></div><div><dt>Notti</dt><dd>{nights(item.arrivalDate,item.departureDate)}</dd></div><div><dt>Lingua</dt><dd>{item.language.toUpperCase()}</dd></div><div><dt>Preventivo</dt><dd>{item.quoteAmountCents == null ? "Non registrato" : formatCurrency(item.quoteAmountCents)}{item.quoteSentAt && <small> · {formatDateTime(item.quoteSentAt)}</small>}</dd></div></dl>
+    <div className="request-card-top"><div className="request-card-main"><p className="eyebrow">{statusLabel(item.status)}{item.archiveOutcome ? ` · ${outcomeLabel(item.archiveOutcome)}` : ""}</p><h2>{item.name}</h2><p>{formatDate(item.arrivalDate)} – {formatDate(item.departureDate)} · {item.guestCount} {item.guestCount === 1 ? "ospite" : "ospiti"} · <strong>{item.quoteAmountCents == null ? "Preventivo non registrato" : formatCurrency(item.quoteAmountCents)}</strong></p></div>{active !== "archived" && <div className={`priority-badge ${priority.level}`}><small>{priority.action}</small><strong>{priority.label}</strong></div>}<button className="request-expand" type="button" aria-expanded={expanded} onClick={()=>setExpanded(value=>!value)}>{expanded?"Chiudi":"Dettagli"}<span aria-hidden="true">⌄</span></button></div>
+    {expanded && <div className="request-details"><dl><div><dt>Email</dt><dd><a href={`mailto:${item.email}`}>{item.email}</a></dd></div><div><dt>Arrivo</dt><dd>{formatDate(item.arrivalDate)}</dd></div><div><dt>Partenza</dt><dd>{formatDate(item.departureDate)}</dd></div><div><dt>Notti</dt><dd>{nights(item.arrivalDate,item.departureDate)}</dd></div><div><dt>Lingua</dt><dd>{item.language.toUpperCase()}</dd></div><div><dt>Preventivo</dt><dd>{item.quoteAmountCents == null ? "Non registrato" : formatCurrency(item.quoteAmountCents)}</dd></div></dl>
     {item.message && <p className="request-message">“{item.message}”</p>}
-    <div className="request-actions"><button className="primary-action" disabled={busy===item.id} onClick={()=>openQuote(item)}>{item.status === "quote_sent" ? "Invia nuovamente" : "Prepara preventivo"}</button><a href={`mailto:${item.email}`}>Email libera</a><label className="status-control"><span>Stato</span><select value={statusValue} disabled={busy===item.id} onChange={event=>changeStatus(event.target.value)}><option value="quote_requested">Richiesta preventivo</option><option value="quote_sent">Preventivo inviato</option><option value="accepted">Accettata</option><option value="checked_in">Check-in eseguito</option><option value="police_registered">Questura registrata</option><option value="archived:completed">Archiviata · completata</option><option value="archived:cancelled">Archiviata · annullata</option><option value="archived:unavailable">Archiviata · non disponibile</option></select></label></div>
+    <div className="request-actions"><button className="primary-action" disabled={busy===item.id} onClick={()=>openQuote(item)}>{item.status === "quote_sent" ? "Invia nuovamente" : "Prepara preventivo"}</button><a href={`mailto:${item.email}`}>Email libera</a></div>
+    <div className="manual-status"><h3>Aggiorna stato</h3><div><select value={selectedStatus} disabled={busy===item.id} onChange={event=>setSelectedStatus(event.target.value)}><option value="quote_requested">Richiesta preventivo</option><option value="quote_sent">Preventivo inviato</option><option value="accepted">Accettata</option><option value="checked_in">Check-in eseguito</option><option value="police_registered">Questura registrata</option><option value="archived:completed">Archiviata · completata</option><option value="archived:cancelled">Archiviata · annullata</option><option value="archived:unavailable">Archiviata · non disponibile</option></select><input value={operatorNote} maxLength={2000} onChange={event=>setOperatorNote(event.target.value)} placeholder="Nota operatore (facoltativa)"/><button type="button" disabled={busy===item.id || selectedStatus===statusValue} onClick={changeStatus}>Registra</button></div></div>
+    <section className="request-timeline"><h3>Cronologia</h3>{!events.length?<p className="timeline-empty">Cronologia disponibile dai prossimi aggiornamenti.</p>:<ol>{[...events].reverse().map(event=><li key={event.id}><span className={`timeline-dot ${event.eventType}`}/><div><p><strong>{eventTitle(event)}</strong><time>{formatDateTime(event.createdAt)}</time></p>{event.actorEmail&&<small>Operatore: {event.actorEmail}</small>}{event.note&&<p className="timeline-note">{event.note}</p>}{event.subject&&<details className="email-history"><summary>{event.subject}</summary><pre>{event.body}</pre></details>}{event.amountCents!=null&&<b>{formatCurrency(event.amountCents)}</b>}</div></li>)}</ol>}</section></div>}
     {quoteOpen && <form className="quote-form" onSubmit={event=>{event.preventDefault();sendQuote(item);}}><div className="quote-form-heading"><div><p className="eyebrow">Preventivo in {languageLabel(item.language)}</p><h3>Invia a {item.name}</h3></div><button type="button" className="quote-close" onClick={closeQuote} aria-label="Chiudi">×</button></div><div className="quote-grid"><label>Importo totale (€)<input type="text" inputMode="decimal" placeholder="es. 480,00" required value={quoteDraft.price} onChange={e=>setQuoteDraft({...quoteDraft,price:e.target.value})}/></label><label>Destinatario<input type="email" value={item.email} readOnly/></label><label className="field-wide">Oggetto<input required maxLength={180} value={quoteDraft.subject} onChange={e=>setQuoteDraft({...quoteDraft,subject:e.target.value})}/></label><label className="field-wide">Testo<textarea required rows={9} maxLength={6000} value={quoteDraft.body} onChange={e=>setQuoteDraft({...quoteDraft,body:e.target.value})}/><small><code>{`{PREZZO}`}</code> sarà sostituito con l’importo indicato.</small></label></div><div className="quote-actions"><button type="button" onClick={closeQuote}>Annulla</button><button className="button" disabled={busy===item.id}>{busy===item.id ? "Invio…" : "Invia preventivo"}</button></div></form>}
   </article>;
 }
@@ -96,6 +102,8 @@ function formatDateTime(value:string){return new Intl.DateTimeFormat("it-IT",{da
 function formatCurrency(value:number){return new Intl.NumberFormat("it-IT",{style:"currency",currency:"EUR"}).format(value/100);}
 function nights(arrival:string,departure:string){return Math.round((Date.parse(`${departure}T12:00:00Z`)-Date.parse(`${arrival}T12:00:00Z`))/86_400_000);}
 function outcomeLabel(value:ArchiveOutcome){return {completed:"Completata",cancelled:"Annullata",unavailable:"Mancanza disponibilità"}[value];}
+function statusLabel(value:string){return ({quote_requested:"Richiesta preventivo",quote_sent:"Preventivo inviato",accepted:"Accettata",checked_in:"Check-in eseguito",police_registered:"Questura registrata",archived:"Archiviata"} as Record<string,string>)[value]||value;}
+function eventTitle(event:AvailabilityEvent){if(event.eventType==="request_created")return "Richiesta ricevuta";if(event.eventType==="email_sent")return event.amountCents!=null?"Preventivo inviato":"Email inviata";return `${event.fromStatus?statusLabel(event.fromStatus)+" → ":""}${statusLabel(event.toStatus||"")}`;}
 function priorityDate(item: AvailabilityRequest) {
   if (item.status === "quote_requested") return new Date(item.createdAt);
   if (item.status === "police_registered") return new Date(`${item.departureDate}T12:00:00`);

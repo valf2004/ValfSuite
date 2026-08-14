@@ -110,12 +110,24 @@ test("sends localized quotes and advances the workflow", async () => {
   ]);
   for (const language of ["it", "en", "fr", "es", "de"]) assert.match(dashboard, new RegExp(`${language}:\\{subject:`));
   assert.match(dashboard, /\{PREZZO\}/);
-  assert.match(dashboard, /status-control/);
+  assert.match(dashboard, /manual-status/);
   assert.match(route, /privateUserFromCookie/);
-  assert.match(route, /updateAvailabilityQuote\(item\.id, quoteAmountCents, subject, deliveredBody\)/);
+  assert.match(route, /updateAvailabilityQuote\(item\.id, quoteAmountCents, subject, deliveredBody, user\.email\)/);
   assert.match(dashboard, /formatCurrency\(item\.quoteAmountCents\)/);
   assert.match(dashboard, /Non registrato/);
   assert.match(mailer, /sendQuoteEmail/);
+});
+
+test("stores and displays the complete request timeline", async () => {
+  const [schema,dashboard,statusRoute,requestRoute,migration] = await Promise.all([source("db/schema.ts"),source("app/area-privata/RequestsDashboard.tsx"),source("app/api/gestione/richieste/route.ts"),source("app/api/disponibilita/route.ts"),source("drizzle/0003_request_timeline.sql")]);
+  assert.match(schema,/availability_events/);
+  assert.match(dashboard,/request-expand/);
+  assert.match(dashboard,/request-timeline/);
+  assert.match(dashboard,/Nota operatore/);
+  assert.doesNotMatch(dashboard,/Attività in ordine di priorità/);
+  assert.match(statusRoute,/note/);
+  assert.match(requestRoute,/recordAvailabilityEvent/);
+  assert.match(migration,/idx_availability_events_request_created/);
 });
 
 test("persists the sent quote value and message history", async () => {

@@ -23,3 +23,19 @@ export const availabilityRequests = sqliteTable("availability_requests", {
   index("idx_availability_requests_status_created").on(table.status, table.createdAt),
   index("idx_availability_requests_arrival").on(table.arrivalDate),
 ]);
+
+export const availabilityEvents = sqliteTable("availability_events", {
+  id: text("id").primaryKey(),
+  requestId: text("request_id").notNull().references(() => availabilityRequests.id, { onDelete: "cascade" }),
+  eventType: text("event_type", { enum: ["request_created", "email_sent", "status_changed"] }).notNull(),
+  fromStatus: text("from_status"),
+  toStatus: text("to_status"),
+  actorEmail: text("actor_email"),
+  note: text("note"),
+  subject: text("subject"),
+  body: text("body"),
+  amountCents: integer("amount_cents"),
+  createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+}, (table) => [
+  index("idx_availability_events_request_created").on(table.requestId, table.createdAt),
+]);

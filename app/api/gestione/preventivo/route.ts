@@ -1,5 +1,5 @@
 import { headers } from "next/headers";
-import { listAvailabilityRequests, updateAvailabilityQuote } from "../../../../db/availability";
+import { listAvailabilityEvents, listAvailabilityRequests, updateAvailabilityQuote } from "../../../../db/availability";
 import { privateUserFromCookie } from "../../../lib/google-auth";
 import { sendQuoteEmail } from "../../../lib/availability-email";
 
@@ -22,6 +22,7 @@ export async function POST(request: Request) {
   const deliveredBody = body.replaceAll("{PREZZO}", localizedPrice);
   const result = await sendQuoteEmail(item.email, subject, deliveredBody);
   if (!result.sent) return Response.json({ message: "Invio email non configurato." }, { status: 503 });
-  const updated = await updateAvailabilityQuote(item.id, quoteAmountCents, subject, deliveredBody);
-  return Response.json({ request: updated[0], sentBy: user.email });
+  const updated = await updateAvailabilityQuote(item.id, quoteAmountCents, subject, deliveredBody, user.email);
+  const event = (await listAvailabilityEvents()).filter(row=>row.requestId===item.id).at(-1);
+  return Response.json({ request: updated[0], event, sentBy: user.email });
 }

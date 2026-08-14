@@ -1,4 +1,4 @@
-import { createAvailabilityRequest } from "../../../db/availability";
+import { createAvailabilityRequest, recordAvailabilityEvent } from "../../../db/availability";
 import { sendAvailabilityConfirmation, sendAvailabilityNotification } from "../../lib/availability-email";
 
 const languages = new Set(["it", "en", "fr", "es", "de"]);
@@ -35,8 +35,10 @@ export async function POST(request: Request) {
     const now = new Date().toISOString();
     const id = crypto.randomUUID();
     await createAvailabilityRequest({ id, name, email, arrivalDate, departureDate, guestCount, message, language, privacyAcceptedAt: now, createdAt: now, updatedAt: now });
+    await recordAvailabilityEvent({ requestId:id, eventType:"request_created", toStatus:"quote_requested", note:message || "Richiesta di disponibilità ricevuta", createdAt:now });
     const emailData = { id, name, email, arrivalDate, departureDate, guestCount, message, language };
     const deliveries = await Promise.allSettled([sendAvailabilityNotification(emailData), sendAvailabilityConfirmation(emailData)]);
+    for (const [index,delivery] of deliveries.entries()) if (delivery.status === "fulfilled" && delivery.value.sent) await recordAvailabilityEvent({ requestId:id, eventType:"email_sent", toStatus:"quote_requested", note:index === 0 ? "Notifica inviata agli amministratori" : "Conferma di ricezione inviata al cliente", subject:delivery.value.subject, body:delivery.value.body, createdAt:new Date().toISOString() });
     deliveries.forEach((result, index) => { if (result.status === "rejected") console.error(index === 0 ? "availability_email_failed" : "availability_confirmation_failed", result.reason instanceof Error ? result.reason.message : "unknown"); });
     return Response.json({ ok: true, requestId: id, message: successMessage[language] }, { status: 201 });
   } catch (error) {
