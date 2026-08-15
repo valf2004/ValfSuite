@@ -32,7 +32,7 @@ export async function POST(request:Request){
     const baseUrl=publicBaseUrl(request,requestHeaders);
     const nextPaymentToken=remainingAfter>0?createPaymentToken():null;
     const nextPaymentTokenHash=nextPaymentToken?await hashPaymentToken(nextPaymentToken):null;
-    const actionUrl=nextPaymentToken?`${baseUrl}/pagamento/${nextPaymentToken}`:`${baseUrl}/checkin/${await createCheckinToken(item.id,item.departureDate)}`;
+    const actionUrl=nextPaymentToken?`${baseUrl}/pagamento/${nextPaymentToken}?saldo=1`:`${baseUrl}/checkin/${await createCheckinToken(item.id,item.departureDate)}`;
     const actionLabel=nextActionLabel(remainingAfter,item.language);
     const replacements:Record<string,string>={"{IMPORTO_RICEVUTO}":currency(amountCents,item.language),"{SALDO}":currency(remainingAfter,item.language),"{DATA_SALDO}":localizedDate(dueDate,item.language),"{ISTRUZIONI_SALDO}":balanceInstruction(remainingAfter,dueDate,item.language),"{ISTRUZIONI_PROSSIMO_PASSO}":nextStepInstruction(remainingAfter,actionUrl,item.language),"{LINK_AZIONE}":actionUrl};
     const deliveredBody=Object.entries(replacements).reduce((text,[placeholder,value])=>text.replaceAll(placeholder,value),body);

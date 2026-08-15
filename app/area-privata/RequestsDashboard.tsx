@@ -109,7 +109,8 @@ function RequestCard({item,events,active,busy,today,quoteOpen,quoteDraft,setQuot
   const priority=getPriority(item);
   const statusValue=item.status === "archived" ? `archived:${item.archiveOutcome || "completed"}` : item.status;
   const confirmedCents=confirmedPaymentTotal(events);
-  const balanceCents=item.quoteAmountCents==null?null:Math.max(0,item.quoteAmountCents-confirmedCents);
+  const recordedOrExpectedDeposit=item.quoteAmountCents==null?0:confirmedCents>0?confirmedCents:Math.round(item.quoteAmountCents*.3);
+  const balanceCents=item.quoteAmountCents==null?null:Math.max(0,item.quoteAmountCents-recordedOrExpectedDeposit);
   const balanceDueDate=shiftDate(item.arrivalDate,-7);
   async function changeStatus(force=false) { if(!pendingStatus)return; const [status,outcome]=pendingStatus.split(":") as [Status,ArchiveOutcome?]; const result=await move(item.id,status,outcome,operatorNote,force);if(result.conflicts){setConflicts(result.conflicts);return;}if(result.ok){setOperatorNote("");setPendingStatus(null);setConflicts(undefined);} }
   return <article className={`request-card priority-${priority.level}`}>

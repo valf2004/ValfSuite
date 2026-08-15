@@ -241,7 +241,8 @@ test("confirms verified payments and tracks the remaining balance", async () => 
   assert.match(paymentPage,/confirmedCents=\{quote\.confirmedAmountCents\}/);
   assert.match(paymentRoute,/"accepted"/);
   assert.match(paymentForm,/remainingCents=Math\.max\(0,totalCents-confirmedCents\)/);
-  assert.match(paymentForm,/confirmedCents>0\?remainingCents/);
+  assert.match(paymentForm,/balanceRequested\?balanceCents/);
+  assert.match(paymentForm,/totalCents-\(confirmedCents>0\?confirmedCents:depositCents\)/);
   assert.match(paymentForm,/Saldo residuo/);
 });
 
@@ -270,7 +271,10 @@ test("sends balance and check-in links through the accepted booking workflow", a
   assert.match(confirmation,/createCheckinToken/);
   assert.match(confirmation,/nextStepInstruction/);
   assert.match(balanceRoute,/recordGuestCommunication/);
+  assert.match(balanceRoute,/recordedOrExpectedDeposit/);
+  assert.match(balanceRoute,/Math\.round\(item\.quoteAmountCents\*\.3\)/);
   assert.match(balanceRoute,/{LINK_SALDO}/);
+  assert.match(balanceRoute,/\?saldo=1/);
   assert.match(inviteRoute,/createCheckinToken/);
   assert.match(inviteRoute,/{LINK_CHECKIN}/);
   assert.match(checkinRoute,/verifyCheckinToken/);
