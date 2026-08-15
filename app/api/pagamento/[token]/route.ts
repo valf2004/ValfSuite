@@ -1,6 +1,7 @@
 import {createPaymentSubmission,findActiveQuoteByTokenHash,type PaymentMethod} from "../../../../db/availability";
 import {sendPaymentNotification} from "../../../lib/availability-email";
 import {hashPaymentToken} from "../../../lib/payment-token";
+import {todayAtProperty} from "../../../lib/property-date";
 import {storeReceipt} from "../../../lib/receipt-storage";
 
 const allowedTypes=new Map([["application/pdf","pdf"],["image/jpeg","jpg"],["image/png","png"]]);
@@ -17,7 +18,7 @@ export async function POST(request:Request,{params}:{params:Promise<{token:strin
     const amountText=String(form.get("amount")||"").trim().replace(",",".");
     const reference=String(form.get("reference")||"").trim().slice(0,120);
     const message=String(form.get("message")||"").trim().slice(0,2000);
-    if(!["bank_transfer","paypal"].includes(method)||!/^\d{4}-\d{2}-\d{2}$/.test(paidAt)||paidAt>new Date().toISOString().slice(0,10)||!/^\d+(\.\d{1,2})?$/.test(amountText))return Response.json({message:"Controlla i dati del pagamento."},{status:400});
+    if(!["bank_transfer","paypal"].includes(method)||!/^\d{4}-\d{2}-\d{2}$/.test(paidAt)||paidAt>todayAtProperty()||!/^\d+(\.\d{1,2})?$/.test(amountText))return Response.json({message:"Controlla i dati del pagamento."},{status:400});
     const paidAmountCents=Math.round(Number(amountText)*100);
     if(paidAmountCents<=0||paidAmountCents>quote.amountCents)return Response.json({message:"L’importo non è valido."},{status:400});
     const receipt=form.get("receipt");

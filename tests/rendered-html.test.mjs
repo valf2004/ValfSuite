@@ -152,8 +152,8 @@ test("persists the sent quote value and message history", async () => {
 });
 
 test("collects payment notifications before booking acceptance", async () => {
-  const [schema,dashboard,quoteRoute,paymentRoute,paymentPage,storage,compose,migration,hosting] = await Promise.all([
-    source("db/schema.ts"),source("app/area-privata/RequestsDashboard.tsx"),source("app/api/gestione/preventivo/route.ts"),source("app/api/pagamento/[token]/route.ts"),source("app/pagamento/[token]/PaymentForm.tsx"),source("app/lib/receipt-storage.ts"),source("docker-compose.yml"),source("drizzle/0004_payment_flow.sql"),source(".openai/hosting.json"),
+  const [schema,dashboard,quoteRoute,paymentRoute,paymentPage,storage,compose,migration,hosting,propertyDate] = await Promise.all([
+    source("db/schema.ts"),source("app/area-privata/RequestsDashboard.tsx"),source("app/api/gestione/preventivo/route.ts"),source("app/api/pagamento/[token]/route.ts"),source("app/pagamento/[token]/PaymentForm.tsx"),source("app/lib/receipt-storage.ts"),source("docker-compose.yml"),source("drizzle/0004_payment_flow.sql"),source(".openai/hosting.json"),source("app/lib/property-date.ts"),
   ]);
   for (const content of [schema,dashboard]) assert.match(content,/payment_reported/);
   assert.match(dashboard,/Pagamenti da verificare/);
@@ -163,6 +163,10 @@ test("collects payment notifications before booking acceptance", async () => {
   assert.match(paymentRoute,/createPaymentSubmission/);
   assert.match(paymentRoute,/5\*1024\*1024/);
   assert.match(paymentPage,/Receipt \(optional\)/);
+  assert.match(paymentPage,/defaultValue=\{today\}/);
+  assert.match(paymentPage,/max=\{today\}/);
+  assert.match(paymentRoute,/todayAtProperty\(\)/);
+  assert.match(propertyDate,/Europe\/Rome/);
   assert.match(storage,/RECEIPTS_DIR/);
   assert.match(storage,/RECEIPTS/);
   assert.match(compose,/receipts_data:\/app\/private-receipts/);
