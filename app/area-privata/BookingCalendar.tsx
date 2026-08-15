@@ -6,7 +6,6 @@ import type {ArchiveOutcome,AvailabilityEvent,AvailabilityRequest,Status} from "
 const statusDefinitions:{id:Status;label:string;short:string}[]=[
   {id:"quote_requested",label:"Richiesta preventivo",short:"Richiesta"},
   {id:"quote_sent",label:"Preventivo inviato",short:"Preventivo"},
-  {id:"payment_reported",label:"Pagamento comunicato",short:"Pagamento"},
   {id:"accepted",label:"Prenotazione accettata",short:"Accettata"},
   {id:"checked_in",label:"Check-in eseguito",short:"Check-in"},
   {id:"police_registered",label:"Questura registrata",short:"Questura"},
@@ -68,7 +67,7 @@ function statusClass(item:AvailabilityRequest){if(item.status!=="archived")retur
 function statusLabel(item:AvailabilityRequest){if(item.status!=="archived")return statusDefinitions.find(definition=>definition.id===item.status)?.label||item.status;return ({completed:"Archiviata · completata",cancelled:"Archiviata · annullata",unavailable:"Archiviata · non disponibile"} as Record<ArchiveOutcome,string>)[item.archiveOutcome||"completed"];}
 function shortStatus(item:AvailabilityRequest){if(item.status!=="archived")return statusDefinitions.find(definition=>definition.id===item.status)?.short||item.status;return item.archiveOutcome==="completed"?"Completata":item.archiveOutcome==="cancelled"?"Annullata":"Non disponibile";}
 function compareCalendarItems(a:AvailabilityRequest,b:AvailabilityRequest){return statusRank(a)-statusRank(b)||a.arrivalDate.localeCompare(b.arrivalDate)||a.name.localeCompare(b.name,"it");}
-function statusRank(item:AvailabilityRequest){return ({checked_in:0,police_registered:1,accepted:2,payment_reported:3,quote_sent:4,quote_requested:5,archived:6} as Record<Status,number>)[item.status];}
+function statusRank(item:AvailabilityRequest){return ({checked_in:0,police_registered:1,accepted:2,quote_sent:3,quote_requested:4,archived:5} as Record<Status,number>)[item.status];}
 function addDays(date:Date,days:number){const value=new Date(date);value.setUTCDate(value.getUTCDate()+days);return value;}
 function dateKey(date:Date){return `${date.getUTCFullYear()}-${String(date.getUTCMonth()+1).padStart(2,"0")}-${String(date.getUTCDate()).padStart(2,"0")}`;}
 function fullDate(value:string){return new Intl.DateTimeFormat("it-IT",{weekday:"long",day:"numeric",month:"long",year:"numeric",timeZone:"UTC"}).format(new Date(`${value}T12:00:00Z`));}

@@ -19,11 +19,10 @@ export async function POST(request:Request){
     if(!subject||!body||amountCents<=0)return Response.json({message:"Controlla i dati della conferma."},{status:400});
     const item=(await listAvailabilityRequests()).find(row=>row.id===data.id);
     if(!item)return Response.json({message:"Richiesta non trovata."},{status:404});
-    if(item.status!=="payment_reported")return Response.json({message:"Il pagamento non è in attesa di verifica."},{status:409});
+    if(item.paymentStatus!=="reported")return Response.json({message:"Il pagamento non è in attesa di verifica."},{status:409});
     if(item.quoteAmountCents==null)return Response.json({message:"Il valore del preventivo non è disponibile."},{status:409});
     const allEvents=await listAvailabilityEvents();
-    const previousStatus=[...allEvents].reverse().find(event=>event.requestId===item.id&&event.eventType==="payment_reported")?.fromStatus;
-    const targetStatus=previousStatus==="checked_in"||previousStatus==="police_registered"?previousStatus:"accepted";
+    const targetStatus=item.status==="checked_in"||item.status==="police_registered"?item.status:"accepted";
     const confirmedCents=allEvents.filter(event=>event.requestId===item.id&&event.eventType==="payment_confirmed").reduce((total,event)=>total+(event.amountCents||0),0);
     const remainingBefore=Math.max(0,item.quoteAmountCents-confirmedCents);
     if(amountCents>remainingBefore)return Response.json({message:`L’importo supera il saldo residuo di ${currency(remainingBefore,item.language)}.`},{status:400});

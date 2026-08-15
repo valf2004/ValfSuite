@@ -1,7 +1,8 @@
 import postgres, { type Sql } from "postgres";
 import { availabilityEvents, availabilityQuotes, availabilityRequests } from "./schema";
 
-export type AvailabilityStatus = "quote_requested" | "quote_sent" | "payment_reported" | "accepted" | "checked_in" | "police_registered" | "archived";
+export type AvailabilityStatus = "quote_requested" | "quote_sent" | "accepted" | "checked_in" | "police_registered" | "archived";
+export type PaymentStatus = "unpaid" | "reported" | "partial" | "paid";
 export type ArchiveOutcome = "completed" | "cancelled" | "unavailable";
 export type PaymentMethod = "bank_transfer" | "paypal";
 export type AvailabilityRecord = typeof availabilityRequests.$inferSelect;
@@ -70,7 +71,8 @@ export async function recordPaymentConfirmation(input:PaymentConfirmationInput) 
   if(input.fullyPaid)await sql`UPDATE availability_quotes SET active=false WHERE request_id=${input.requestId}`;
   else if(input.nextPaymentTokenHash)await sql`UPDATE availability_quotes SET token_hash=${input.nextPaymentTokenHash} WHERE request_id=${input.requestId} AND active=true`;
   const targetStatus=input.targetStatus||"accepted";
-  const rows=await sql`UPDATE availability_requests SET status=${targetStatus},archive_outcome=NULL,updated_at=${createdAt} WHERE id=${input.requestId} RETURNING *`;
+  const paymentStatus=input.fullyPaid?"paid":"partial";
+  const rows=await sql`UPDATE availability_requests SET status=${targetStatus},payment_status=${paymentStatus},archive_outcome=NULL,updated_at=${createdAt} WHERE id=${input.requestId} RETURNING *`;
   if(rows.length)await insertEvent({requestId:input.requestId,eventType:"payment_confirmed",fromStatus:current[0]?.status==null?null:String(current[0].status),toStatus:targetStatus,actorEmail:input.actorEmail,note:"Pagamento verificato e conferma inviata al cliente",subject:input.subject,body:input.body,amountCents:input.amountCents,createdAt});
   return rows.map(mapRow);
 }
@@ -104,10 +106,10 @@ export async function createPaymentSubmission(input:PaymentSubmissionInput) {
   await ready();
   const current=await sql`SELECT status FROM availability_requests WHERE id=${input.requestId}`;
   await sql`INSERT INTO payment_submissions (id,quote_id,request_id,method,paid_amount_cents,paid_at,payment_reference,message,receipt_key,receipt_name,receipt_content_type,receipt_size,created_at) VALUES (${input.id},${input.quoteId},${input.requestId},${input.method},${input.paidAmountCents},${input.paidAt},${input.paymentReference},${input.message},${input.receiptKey},${input.receiptName},${input.receiptContentType},${input.receiptSize},${input.createdAt})`;
-  const rows=await sql`UPDATE availability_requests SET status='payment_reported',archive_outcome=NULL,updated_at=${input.createdAt} WHERE id=${input.requestId} RETURNING *`;
+  const rows=await sql`UPDATE availability_requests SET payment_status='reported',archive_outcome=NULL,updated_at=${input.createdAt} WHERE id=${input.requestId} RETURNING *`;
   const methodLabel=input.method==="paypal"?"PayPal":"bonifico bancario";
   const reference=input.paymentReference?` · Riferimento: ${input.paymentReference}`:"";
-  await insertEvent({id:crypto.randomUUID(),requestId:input.requestId,eventType:"payment_reported",fromStatus:current[0]?.status==null?null:String(current[0].status),toStatus:"payment_reported",note:`Pagamento comunicato tramite ${methodLabel} · Data: ${input.paidAt}${reference}`,body:input.message||null,amountCents:input.paidAmountCents,attachmentId:input.receiptKey?input.id:null,attachmentName:input.receiptName,createdAt:input.createdAt});
+  await insertEvent({id:crypto.randomUUID(),requestId:input.requestId,eventType:"payment_reported",fromStatus:current[0]?.status==null?null:String(current[0].status),toStatus:current[0]?.status==null?null:String(current[0].status),note:`Pagamento comunicato tramite ${methodLabel} · Data: ${input.paidAt}${reference}`,body:input.message||null,amountCents:input.paidAmountCents,attachmentId:input.receiptKey?input.id:null,attachmentName:input.receiptName,createdAt:input.createdAt});
   return rows.map(mapRow);
 }
 
@@ -128,6 +130,7 @@ async function initializePostgres(client: Sql) {
     guest_count integer NOT NULL CHECK (guest_count BETWEEN 1 AND 4),message text NOT NULL DEFAULT '',language text NOT NULL DEFAULT 'it',
     privacy_accepted_at timestamptz NOT NULL,created_at timestamptz NOT NULL DEFAULT now(),updated_at timestamptz NOT NULL DEFAULT now(),CHECK (departure_date > arrival_date))`;
   await client`ALTER TABLE availability_requests ADD COLUMN IF NOT EXISTS archive_outcome text`;
+  await client`ALTER TABLE availability_requests ADD COLUMN IF NOT EXISTS payment_status text NOT NULL DEFAULT 'unpaid'`;
   await client`ALTER TABLE availability_requests ADD COLUMN IF NOT EXISTS quote_amount_cents integer`;
   await client`ALTER TABLE availability_requests ADD COLUMN IF NOT EXISTS quote_subject text`;
   await client`ALTER TABLE availability_requests ADD COLUMN IF NOT EXISTS quote_body text`;
@@ -139,9 +142,15 @@ async function initializePostgres(client: Sql) {
   await client`CREATE TABLE IF NOT EXISTS payment_submissions (id text PRIMARY KEY,quote_id text NOT NULL REFERENCES availability_quotes(id) ON DELETE CASCADE,request_id text NOT NULL REFERENCES availability_requests(id) ON DELETE CASCADE,method text NOT NULL CHECK (method IN ('bank_transfer','paypal')),paid_amount_cents integer NOT NULL,paid_at date NOT NULL,payment_reference text NOT NULL DEFAULT '',message text NOT NULL DEFAULT '',receipt_key text,receipt_name text,receipt_content_type text,receipt_size integer,created_at timestamptz NOT NULL DEFAULT now())`;
   await client`ALTER TABLE availability_requests DROP CONSTRAINT IF EXISTS availability_requests_status_check`;
   await client`ALTER TABLE availability_requests DROP CONSTRAINT IF EXISTS availability_requests_archive_outcome_check`;
+  await client`ALTER TABLE availability_requests DROP CONSTRAINT IF EXISTS availability_requests_payment_status_check`;
+  await client`UPDATE availability_requests SET payment_status='reported' WHERE status='payment_reported'`;
+  await client`UPDATE availability_requests r SET status=COALESCE((SELECT e.from_status FROM availability_events e WHERE e.request_id=r.id AND e.event_type='payment_reported' AND e.from_status IS NOT NULL AND e.from_status<>'payment_reported' ORDER BY e.created_at DESC LIMIT 1),'quote_sent') WHERE r.status='payment_reported'`;
+  await client`UPDATE availability_requests r SET payment_status='paid' WHERE r.payment_status='unpaid' AND r.quote_amount_cents IS NOT NULL AND COALESCE((SELECT SUM(e.amount_cents) FROM availability_events e WHERE e.request_id=r.id AND e.event_type='payment_confirmed'),0)>=r.quote_amount_cents`;
+  await client`UPDATE availability_requests r SET payment_status='partial' WHERE r.payment_status='unpaid' AND COALESCE((SELECT SUM(e.amount_cents) FROM availability_events e WHERE e.request_id=r.id AND e.event_type='payment_confirmed'),0)>0`;
   await client`UPDATE availability_requests SET status=CASE WHEN status='new' THEN 'quote_requested' WHEN status='contacted' THEN 'quote_sent' WHEN status='confirmed' THEN 'accepted' WHEN status='declined' THEN 'archived' ELSE status END`;
   await client`UPDATE availability_requests SET archive_outcome='unavailable' WHERE status='archived' AND archive_outcome IS NULL`;
-  await client`ALTER TABLE availability_requests ADD CONSTRAINT availability_requests_status_check CHECK (status IN ('quote_requested','quote_sent','payment_reported','accepted','checked_in','police_registered','archived'))`;
+  await client`ALTER TABLE availability_requests ADD CONSTRAINT availability_requests_status_check CHECK (status IN ('quote_requested','quote_sent','accepted','checked_in','police_registered','archived'))`;
+  await client`ALTER TABLE availability_requests ADD CONSTRAINT availability_requests_payment_status_check CHECK (payment_status IN ('unpaid','reported','partial','paid'))`;
   await client`ALTER TABLE availability_requests ADD CONSTRAINT availability_requests_archive_outcome_check CHECK (archive_outcome IS NULL OR archive_outcome IN ('completed','cancelled','unavailable'))`;
   await client`CREATE INDEX IF NOT EXISTS idx_availability_events_request_created ON availability_events (request_id,created_at)`;
   await client`CREATE INDEX IF NOT EXISTS idx_availability_quotes_request_active ON availability_quotes (request_id,active)`;
@@ -153,7 +162,7 @@ async function initializePostgres(client: Sql) {
 
 function mapRow(row: Record<string, unknown>): AvailabilityRecord {
   const iso=(value:unknown)=>value instanceof Date?value.toISOString():String(value);
-  return {id:String(row.id),status:String(row.status) as AvailabilityStatus,archiveOutcome:row.archive_outcome?String(row.archive_outcome) as ArchiveOutcome:null,name:String(row.name),email:String(row.email),arrivalDate:dateValue(row.arrival_date),departureDate:dateValue(row.departure_date),guestCount:Number(row.guest_count),message:String(row.message??""),language:String(row.language),quoteAmountCents:row.quote_amount_cents==null?null:Number(row.quote_amount_cents),quoteSubject:row.quote_subject==null?null:String(row.quote_subject),quoteBody:row.quote_body==null?null:String(row.quote_body),quoteSentAt:row.quote_sent_at==null?null:iso(row.quote_sent_at),privacyAcceptedAt:iso(row.privacy_accepted_at),createdAt:iso(row.created_at),updatedAt:iso(row.updated_at)};
+  return {id:String(row.id),status:String(row.status) as AvailabilityStatus,paymentStatus:String(row.payment_status||"unpaid") as PaymentStatus,archiveOutcome:row.archive_outcome?String(row.archive_outcome) as ArchiveOutcome:null,name:String(row.name),email:String(row.email),arrivalDate:dateValue(row.arrival_date),departureDate:dateValue(row.departure_date),guestCount:Number(row.guest_count),message:String(row.message??""),language:String(row.language),quoteAmountCents:row.quote_amount_cents==null?null:Number(row.quote_amount_cents),quoteSubject:row.quote_subject==null?null:String(row.quote_subject),quoteBody:row.quote_body==null?null:String(row.quote_body),quoteSentAt:row.quote_sent_at==null?null:iso(row.quote_sent_at),privacyAcceptedAt:iso(row.privacy_accepted_at),createdAt:iso(row.created_at),updatedAt:iso(row.updated_at)};
 }
 
 async function archiveCompletedStays(){await sql`UPDATE availability_requests SET status='archived',archive_outcome='completed',updated_at=now() WHERE status='police_registered' AND departure_date < CURRENT_DATE`;}

@@ -2,7 +2,7 @@ import { headers } from "next/headers";
 import { listAvailabilityEvents, listAvailabilityRequests, updateAvailabilityStatus, type AvailabilityStatus } from "../../../../db/availability";
 import { privateUserFromCookie } from "../../../lib/google-auth";
 
-const statuses = ["quote_requested", "quote_sent", "payment_reported", "accepted", "checked_in", "police_registered", "archived"] as const;
+const statuses = ["quote_requested", "quote_sent", "accepted", "checked_in", "police_registered", "archived"] as const;
 const outcomes = ["completed", "cancelled", "unavailable"] as const;
 type RequestStatus = typeof statuses[number];
 

@@ -36,6 +36,13 @@
       "when": 1786899600000,
       "tag": "0004_payment_flow",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "6",
+      "when": 1786816856422,
+      "tag": "0005_fantastic_zodiak",
+      "breakpoints": true
     }
   ]
 }

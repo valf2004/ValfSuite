@@ -1,7 +1,8 @@
 import { and, asc, desc, eq } from "drizzle-orm";
 import { availabilityEvents, availabilityQuotes, availabilityRequests, paymentSubmissions } from "./schema";
 
-export type AvailabilityStatus = "quote_requested" | "quote_sent" | "payment_reported" | "accepted" | "checked_in" | "police_registered" | "archived";
+export type AvailabilityStatus = "quote_requested" | "quote_sent" | "accepted" | "checked_in" | "police_registered" | "archived";
+export type PaymentStatus = "unpaid" | "reported" | "partial" | "paid";
 export type ArchiveOutcome = "completed" | "cancelled" | "unavailable";
 export type PaymentMethod = "bank_transfer" | "paypal";
 export type AvailabilityRecord = typeof availabilityRequests.$inferSelect;
@@ -54,7 +55,7 @@ export async function recordPaymentConfirmation(input:PaymentConfirmationInput){
   if(input.fullyPaid)await db.update(availabilityQuotes).set({active:false}).where(eq(availabilityQuotes.requestId,input.requestId));
   else if(input.nextPaymentTokenHash)await db.update(availabilityQuotes).set({tokenHash:input.nextPaymentTokenHash}).where(and(eq(availabilityQuotes.requestId,input.requestId),eq(availabilityQuotes.active,true)));
   const targetStatus=input.targetStatus||"accepted";
-  const updated=await db.update(availabilityRequests).set({status:targetStatus,archiveOutcome:null,updatedAt:createdAt}).where(eq(availabilityRequests.id,input.requestId)).returning();
+  const updated=await db.update(availabilityRequests).set({status:targetStatus,paymentStatus:input.fullyPaid?"paid":"partial",archiveOutcome:null,updatedAt:createdAt}).where(eq(availabilityRequests.id,input.requestId)).returning();
   if(updated.length)await recordAvailabilityEvent({requestId:input.requestId,eventType:"payment_confirmed",fromStatus:current[0]?.status??null,toStatus:targetStatus,actorEmail:input.actorEmail,note:"Pagamento verificato e conferma inviata al cliente",subject:input.subject,body:input.body,amountCents:input.amountCents,createdAt});
   return updated;
 }
@@ -87,9 +88,9 @@ export async function createPaymentSubmission(input:PaymentSubmissionInput){
   if(usesPostgres())return (await postgresRepository()).createPaymentSubmission(input);
   const {getDb}=await import(".");const db=getDb();const current=await db.select().from(availabilityRequests).where(eq(availabilityRequests.id,input.requestId));
   await db.insert(paymentSubmissions).values(input);
-  const updated=await db.update(availabilityRequests).set({status:"payment_reported",archiveOutcome:null,updatedAt:input.createdAt}).where(eq(availabilityRequests.id,input.requestId)).returning();
+  const updated=await db.update(availabilityRequests).set({paymentStatus:"reported",archiveOutcome:null,updatedAt:input.createdAt}).where(eq(availabilityRequests.id,input.requestId)).returning();
   const methodLabel=input.method==="paypal"?"PayPal":"bonifico bancario";const reference=input.paymentReference?` · Riferimento: ${input.paymentReference}`:"";
-  await recordAvailabilityEvent({requestId:input.requestId,eventType:"payment_reported",fromStatus:current[0]?.status??null,toStatus:"payment_reported",note:`Pagamento comunicato tramite ${methodLabel} · Data: ${input.paidAt}${reference}`,body:input.message||null,amountCents:input.paidAmountCents,attachmentId:input.receiptKey?input.id:null,attachmentName:input.receiptName,createdAt:input.createdAt});
+  await recordAvailabilityEvent({requestId:input.requestId,eventType:"payment_reported",fromStatus:current[0]?.status??null,toStatus:current[0]?.status??null,note:`Pagamento comunicato tramite ${methodLabel} · Data: ${input.paidAt}${reference}`,body:input.message||null,amountCents:input.paidAmountCents,attachmentId:input.receiptKey?input.id:null,attachmentName:input.receiptName,createdAt:input.createdAt});
   return updated;
 }
 

@@ -10,7 +10,7 @@ export const metadata:Metadata={title:"Comunica il pagamento | VALF Suite",robot
 export default async function PaymentPage({params,searchParams}:{params:Promise<{token:string}>;searchParams:Promise<{saldo?:string}>}){
   const [{token},query]=await Promise.all([params,searchParams]);
   const quote=token&&token.length===64?await findActiveQuoteByTokenHash(await hashPaymentToken(token)):null;
-  if(!quote||!["quote_sent","payment_reported","accepted","checked_in","police_registered"].includes(quote.status))return <PaymentUnavailable/>;
+  if(!quote||!["quote_sent","accepted","checked_in","police_registered"].includes(quote.status))return <PaymentUnavailable/>;
   const locale=({it:"it-IT",en:"en-GB",fr:"fr-FR",es:"es-ES",de:"de-DE"} as Record<string,string>)[quote.language]||"it-IT";
   const date=(value:string)=>new Intl.DateTimeFormat(locale,{day:"numeric",month:"long",year:"numeric",timeZone:"UTC"}).format(new Date(`${value}T12:00:00Z`));
   return <main className="payment-page"><header className="payment-header"><a href="/"><img src="/logo-valf-suite.png" alt="VALF Suite"/></a></header><section className="payment-intro"><p className="eyebrow">VALF Suite · Prenotazione</p><h1>Comunica il pagamento</h1><p>Compila il modulo dopo aver effettuato il pagamento. La registrazione sarà aggiornata soltanto dopo la verifica dell’accredito.</p></section><PaymentForm token={token} language={quote.language} guestName={quote.name} arrival={date(quote.arrivalDate)} departure={date(quote.departureDate)} guests={quote.guestCount} totalCents={quote.amountCents} confirmedCents={quote.confirmedAmountCents} balanceRequested={query.saldo==="1"} today={todayAtProperty()}/><footer className="payment-footer">VALF Suite · Arcola, Liguria</footer></main>;

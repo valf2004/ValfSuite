@@ -11,7 +11,7 @@ export async function POST(request:Request,{params}:{params:Promise<{token:strin
     const {token}=await params;
     if(!token||token.length!==64)return Response.json({message:"Collegamento non valido."},{status:404});
     const quote=await findActiveQuoteByTokenHash(await hashPaymentToken(token));
-    if(!quote||!["quote_sent","payment_reported","accepted","checked_in","police_registered"].includes(quote.status))return Response.json({message:"La proposta non è più disponibile."},{status:409});
+    if(!quote||!["quote_sent","accepted","checked_in","police_registered"].includes(quote.status))return Response.json({message:"La proposta non è più disponibile."},{status:409});
     const form=await request.formData();
     const method=String(form.get("method")||"") as PaymentMethod;
     const paidAt=String(form.get("paidAt")||"").trim();
@@ -38,6 +38,6 @@ export async function POST(request:Request,{params}:{params:Promise<{token:strin
     try{
       await sendPaymentNotification({name:quote.name,email:quote.email,arrivalDate:quote.arrivalDate,departureDate:quote.departureDate,method:method==="paypal"?"PayPal":"Bonifico bancario",paidAmountCents,paidAt,reference,hasReceipt:Boolean(stored)});
     }catch(error){console.error("payment_notification_failed",error instanceof Error?error.message:"unknown");}
-    return Response.json({ok:true,status:"payment_reported"});
+    return Response.json({ok:true,status:updated[0]?.status,paymentStatus:"reported"});
   }catch(error){console.error("payment_submission_failed",error instanceof Error?error.message:"unknown");return Response.json({message:"Registrazione del pagamento non riuscita."},{status:500});}
 }

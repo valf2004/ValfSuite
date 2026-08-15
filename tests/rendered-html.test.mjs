@@ -200,7 +200,7 @@ test("shows overlapping requests in a protected booking calendar", async () => {
   assert.match(calendar,/\+ altre/);
   assert.match(calendar,/item\.departureDate>key/);
   assert.match(calendar,/confirmedStatuses/);
-  for(const status of ["quote_requested","quote_sent","payment_reported","accepted","checked_in","police_registered","archived"])assert.match(calendar,new RegExp(status));
+  for(const status of ["quote_requested","quote_sent","accepted","checked_in","police_registered","archived"])assert.match(calendar,new RegExp(status));
   assert.match(styles,/booking-calendar/);
   assert.match(styles,/calendar-event\.tentative/);
   assert.match(statusRoute,/target\.arrivalDate<item\.departureDate&&target\.departureDate>item\.arrivalDate/);
@@ -291,4 +291,32 @@ test("sends balance and check-in links through the accepted booking workflow", a
   for(const eventType of ["balance_requested","checkin_invited","checkin_submitted"])assert.match(schema,new RegExp(eventType));
   assert.match(mailer,/actionUrl\?:string/);
   assert.match(paymentRoute,/"checked_in","police_registered"/);
+});
+
+test("keeps payment progress separate from booking status", async () => {
+  const [schema,repository,postgresRepository,dashboard,confirmation,paymentRoute,statusRoute,migration] = await Promise.all([
+    source("db/schema.ts"),
+    source("db/availability.ts"),
+    source("db/availability.postgres.ts"),
+    source("app/area-privata/RequestsDashboard.tsx"),
+    source("app/api/gestione/conferma/route.ts"),
+    source("app/api/pagamento/[token]/route.ts"),
+    source("app/api/gestione/richieste/route.ts"),
+    source("drizzle/0005_fantastic_zodiak.sql"),
+  ]);
+  assert.match(schema,/paymentStatus: text\("payment_status"/);
+  for(const value of ["unpaid","reported","partial","paid"])assert.match(schema,new RegExp(`"${value}"`));
+  assert.match(repository,/set\(\{paymentStatus:"reported"/);
+  assert.doesNotMatch(repository,/set\(\{status:"payment_reported"/);
+  assert.match(postgresRepository,/SET payment_status='reported'/);
+  assert.doesNotMatch(postgresRepository,/SET status='payment_reported'/);
+  assert.match(confirmation,/item\.paymentStatus!=="reported"/);
+  assert.match(dashboard,/matchesTab\(item,active\)/);
+  assert.match(dashboard,/item\.paymentStatus==="reported"/);
+  assert.match(dashboard,/Stato prenotazione/);
+  assert.doesNotMatch(statusRoute,/const statuses = \[[^\]]*payment_reported/);
+  assert.match(paymentRoute,/paymentStatus:"reported"/);
+  assert.match(migration,/ADD `payment_status`/);
+  assert.match(migration,/SET `payment_status` = 'reported'/);
+  assert.match(migration,/SET `status` = COALESCE/);
 });
