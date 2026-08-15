@@ -38,7 +38,12 @@ services:
       SMTP_USER: ${SMTP_USER:-}
       SMTP_APP_PASSWORD: ${SMTP_APP_PASSWORD:-}
       EMAIL_RECIPIENTS: ${EMAIL_RECIPIENTS:-valfsuite@gmail.com,viliorlandi@gmail.com,angrimaldi@gmail.com,valf2004@gmail.com}
+      PUBLIC_BASE_URL: ${PUBLIC_BASE_URL:-https://valfsuite.valfservice.it}
+      RECEIPTS_DIR: /app/private-receipts
       DATABASE_URL: postgresql://valfsuite:${POSTGRES_PASSWORD}@postgres:5432/valfsuite
+    volumes:
+      - receipts_data:/app/private-receipts
 
 volumes:
   postgres_data:
+  receipts_data:

@@ -112,7 +112,8 @@ test("sends localized quotes and advances the workflow", async () => {
   assert.match(dashboard, /\{PREZZO\}/);
   assert.match(dashboard, /status-control/);
   assert.match(route, /privateUserFromCookie/);
-  assert.match(route, /updateAvailabilityQuote\(item\.id, quoteAmountCents, subject, deliveredBody, user\.email\)/);
+  assert.match(route, /recordSentQuote/);
+  assert.match(route, /\{LINK_PAGAMENTO\}/);
   assert.match(dashboard, /formatCurrency\(item\.quoteAmountCents\)/);
   assert.match(dashboard, /Preventivo non registrato/);
   assert.match(mailer, /sendQuoteEmail/);
@@ -145,9 +146,28 @@ test("persists the sent quote value and message history", async () => {
     source("db/schema.ts"), source("db/availability.ts"), source("db/availability.postgres.ts"), source("drizzle/0002_quote_history.sql"),
   ]);
   for (const field of ["quoteAmountCents", "quoteSubject", "quoteBody", "quoteSentAt"]) assert.match(schema, new RegExp(field));
-  assert.match(repository, /updateAvailabilityQuote/);
+  assert.match(repository, /recordSentQuote/);
   assert.match(postgresRepository, /quote_amount_cents/);
   assert.match(migration, /quote_sent_at/);
+});
+
+test("collects payment notifications before booking acceptance", async () => {
+  const [schema,dashboard,quoteRoute,paymentRoute,paymentPage,storage,compose,migration,hosting] = await Promise.all([
+    source("db/schema.ts"),source("app/area-privata/RequestsDashboard.tsx"),source("app/api/gestione/preventivo/route.ts"),source("app/api/pagamento/[token]/route.ts"),source("app/pagamento/[token]/PaymentForm.tsx"),source("app/lib/receipt-storage.ts"),source("docker-compose.yml"),source("drizzle/0004_payment_flow.sql"),source(".openai/hosting.json"),
+  ]);
+  for (const content of [schema,dashboard]) assert.match(content,/payment_reported/);
+  assert.match(dashboard,/Pagamenti da verificare/);
+  assert.match(dashboard,/Scarica ricevuta/);
+  assert.match(quoteRoute,/createPaymentToken/);
+  assert.match(quoteRoute,/hashPaymentToken/);
+  assert.match(paymentRoute,/createPaymentSubmission/);
+  assert.match(paymentRoute,/5\*1024\*1024/);
+  assert.match(paymentPage,/Receipt \(optional\)/);
+  assert.match(storage,/RECEIPTS_DIR/);
+  assert.match(storage,/RECEIPTS/);
+  assert.match(compose,/receipts_data:\/app\/private-receipts/);
+  assert.match(migration,/payment_submissions/);
+  assert.equal(JSON.parse(hosting).r2,"RECEIPTS");
 });
 
 test("confirms each availability request to the guest in their language", async () => {

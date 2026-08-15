@@ -35,7 +35,7 @@ export async function sendAvailabilityNotification(data: AvailabilityEmail) {
   return { sent: true as const, subject, body: textBody(data) };
 }
 
-export async function sendQuoteEmail(to: string, subject: string, body: string) {
+export async function sendQuoteEmail(to: string, subject: string, body: string, actionUrl?:string, actionLabel="Conferma e comunica il pagamento") {
   const config = emailConfig();
   if (!config) return { sent: false as const, reason: "not_configured" as const };
   const transport = nodemailer.createTransport({ host: config.host, port: config.port, secure: config.secure, auth: { user: config.user, pass: config.password } });
@@ -45,9 +45,19 @@ export async function sendQuoteEmail(to: string, subject: string, body: string) 
     replyTo: config.user,
     subject,
     text: body,
-    html: `<div style="font-family:Arial,sans-serif;color:#2f2a25;max-width:640px;line-height:1.6;white-space:pre-wrap">${escapeHtml(body)}</div>`,
+    html: `<div style="font-family:Arial,sans-serif;color:#2f2a25;max-width:640px;line-height:1.6"><div style="white-space:pre-wrap">${escapeHtml(body)}</div>${actionUrl?`<p style="margin:28px 0"><a href="${escapeHtml(actionUrl)}" style="display:inline-block;padding:14px 22px;border-radius:999px;background:#1f6f68;color:white;text-decoration:none;font-weight:700">${escapeHtml(actionLabel)}</a></p>`:""}</div>`,
   });
   return { sent: true as const, subject, body };
+}
+
+export async function sendPaymentNotification(data:{name:string;email:string;arrivalDate:string;departureDate:string;method:string;paidAmountCents:number;paidAt:string;reference:string;hasReceipt:boolean}) {
+  const config=emailConfig();
+  if(!config)return {sent:false as const,reason:"not_configured" as const};
+  const amount=new Intl.NumberFormat("it-IT",{style:"currency",currency:"EUR"}).format(data.paidAmountCents/100);
+  const body=["Pagamento comunicato · VALF Suite","",`Ospite: ${data.name}`,`Email: ${data.email}`,`Soggiorno: ${data.arrivalDate} – ${data.departureDate}`,`Metodo: ${data.method}`,`Importo dichiarato: ${amount}`,`Data dichiarata: ${data.paidAt}`,`Riferimento: ${data.reference||"—"}`,`Ricevuta allegata: ${data.hasReceipt?"sì":"no"}`,"","Accedi all’area riservata per verificare l’accredito e confermare la prenotazione."].join("\n");
+  const transport=nodemailer.createTransport({host:config.host,port:config.port,secure:config.secure,auth:{user:config.user,pass:config.password}});
+  await transport.sendMail({from:`VALF Suite <${config.user}>`,to:config.recipients,replyTo:data.email,subject:`Pagamento da verificare · ${data.name}`,text:body,html:`<div style="font-family:Arial,sans-serif;color:#2f2a25;max-width:640px;line-height:1.6;white-space:pre-wrap">${escapeHtml(body)}</div>`});
+  return {sent:true as const,subject:`Pagamento da verificare · ${data.name}`,body};
 }
 
 export async function sendAvailabilityConfirmation(data: AvailabilityEmail) {
