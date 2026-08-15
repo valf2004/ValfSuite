@@ -11,7 +11,7 @@ export async function POST(request:Request,{params}:{params:Promise<{token:strin
     const {token}=await params;
     if(!token||token.length!==64)return Response.json({message:"Collegamento non valido."},{status:404});
     const quote=await findActiveQuoteByTokenHash(await hashPaymentToken(token));
-    if(!quote||!["quote_sent","payment_reported"].includes(quote.status))return Response.json({message:"La proposta non è più disponibile."},{status:409});
+    if(!quote||!["quote_sent","payment_reported","accepted"].includes(quote.status))return Response.json({message:"La proposta non è più disponibile."},{status:409});
     const form=await request.formData();
     const method=String(form.get("method")||"") as PaymentMethod;
     const paidAt=String(form.get("paidAt")||"").trim();
@@ -20,7 +20,7 @@ export async function POST(request:Request,{params}:{params:Promise<{token:strin
     const message=String(form.get("message")||"").trim().slice(0,2000);
     if(!["bank_transfer","paypal"].includes(method)||!/^\d{4}-\d{2}-\d{2}$/.test(paidAt)||paidAt>todayAtProperty()||!/^\d+(\.\d{1,2})?$/.test(amountText))return Response.json({message:"Controlla i dati del pagamento."},{status:400});
     const paidAmountCents=Math.round(Number(amountText)*100);
-    if(paidAmountCents<=0||paidAmountCents>quote.amountCents)return Response.json({message:"L’importo non è valido."},{status:400});
+    if(paidAmountCents<=0||paidAmountCents>quote.amountCents-quote.confirmedAmountCents)return Response.json({message:"L’importo non è valido o supera il saldo residuo."},{status:400});
     const receipt=form.get("receipt");
     if(receipt instanceof File&&receipt.size>5*1024*1024)return Response.json({message:"La ricevuta supera 5 MB."},{status:400});
     if(receipt instanceof File&&receipt.size>0&&!allowedTypes.has(receipt.type))return Response.json({message:"Sono ammessi soltanto PDF, JPG e PNG."},{status:400});

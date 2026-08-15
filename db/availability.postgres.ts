@@ -11,9 +11,10 @@ type NewAvailabilityEvent = Pick<AvailabilityEvent,"requestId"|"eventType"|"crea
 
 export type PublicQuote = {
   quoteId:string; requestId:string; name:string; email:string; arrivalDate:string; departureDate:string;
-  guestCount:number; language:string; amountCents:number; status:AvailabilityStatus;
+  guestCount:number; language:string; amountCents:number; confirmedAmountCents:number; status:AvailabilityStatus;
 };
 export type SentQuote = { id:string; requestId:string; amountCents:number; subject:string; body:string; tokenHash:string; actorEmail?:string };
+export type PaymentConfirmationInput = { requestId:string; amountCents:number; subject:string; body:string; actorEmail:string; fullyPaid:boolean };
 export type PaymentSubmissionInput = {
   id:string; quoteId:string; requestId:string; method:PaymentMethod; paidAmountCents:number; paidAt:string;
   paymentReference:string; message:string; receiptKey:string|null; receiptName:string|null;
@@ -61,12 +62,22 @@ export async function recordSentQuote(quote:SentQuote) {
   return rows.map(mapRow);
 }
 
+export async function recordPaymentConfirmation(input:PaymentConfirmationInput) {
+  await ready();
+  const current=await sql`SELECT status FROM availability_requests WHERE id=${input.requestId}`;
+  const createdAt=new Date().toISOString();
+  if(input.fullyPaid)await sql`UPDATE availability_quotes SET active=false WHERE request_id=${input.requestId}`;
+  const rows=await sql`UPDATE availability_requests SET status='accepted',archive_outcome=NULL,updated_at=${createdAt} WHERE id=${input.requestId} RETURNING *`;
+  if(rows.length)await insertEvent({requestId:input.requestId,eventType:"payment_confirmed",fromStatus:current[0]?.status==null?null:String(current[0].status),toStatus:"accepted",actorEmail:input.actorEmail,note:"Pagamento verificato e conferma inviata al cliente",subject:input.subject,body:input.body,amountCents:input.amountCents,createdAt});
+  return rows.map(mapRow);
+}
+
 export async function findActiveQuoteByTokenHash(tokenHash:string):Promise<PublicQuote|null> {
   await ready();
-  const rows=await sql`SELECT q.id AS quote_id,q.request_id,q.amount_cents,r.name,r.email,r.arrival_date,r.departure_date,r.guest_count,r.language,r.status FROM availability_quotes q JOIN availability_requests r ON r.id=q.request_id WHERE q.token_hash=${tokenHash} AND q.active=true LIMIT 1`;
+  const rows=await sql`SELECT q.id AS quote_id,q.request_id,q.amount_cents,r.name,r.email,r.arrival_date,r.departure_date,r.guest_count,r.language,r.status,COALESCE((SELECT SUM(e.amount_cents) FROM availability_events e WHERE e.request_id=q.request_id AND e.event_type='payment_confirmed'),0) AS confirmed_amount_cents FROM availability_quotes q JOIN availability_requests r ON r.id=q.request_id WHERE q.token_hash=${tokenHash} AND q.active=true LIMIT 1`;
   if(!rows.length)return null;
   const row=rows[0];
-  return {quoteId:String(row.quote_id),requestId:String(row.request_id),name:String(row.name),email:String(row.email),arrivalDate:dateValue(row.arrival_date),departureDate:dateValue(row.departure_date),guestCount:Number(row.guest_count),language:String(row.language),amountCents:Number(row.amount_cents),status:String(row.status) as AvailabilityStatus};
+  return {quoteId:String(row.quote_id),requestId:String(row.request_id),name:String(row.name),email:String(row.email),arrivalDate:dateValue(row.arrival_date),departureDate:dateValue(row.departure_date),guestCount:Number(row.guest_count),language:String(row.language),amountCents:Number(row.amount_cents),confirmedAmountCents:Number(row.confirmed_amount_cents),status:String(row.status) as AvailabilityStatus};
 }
 
 export async function createPaymentSubmission(input:PaymentSubmissionInput) {

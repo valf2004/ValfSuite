@@ -3,6 +3,7 @@ import { listAvailabilityEvents, listAvailabilityRequests, type AvailabilityEven
 import { authIsConfigured, privateUserFromCookie } from "../lib/google-auth";
 import RequestsDashboard from "./RequestsDashboard";
 import { PrivateHeader, PrivateLogin } from "./PrivateChrome";
+import {todayAtProperty} from "../lib/property-date";
 
 export const dynamic = "force-dynamic";
 
@@ -17,6 +18,6 @@ export default async function PrivateAreaPage() {
 function PrivateDashboard({user,requests,events}:{user:{email:string;name:string;picture?:string};requests:AvailabilityRecord[];events:AvailabilityEvent[]}) {
   return <main className="dashboard-page">
     <PrivateHeader user={user} active="requests"/>
-    <RequestsDashboard initialRequests={requests} initialEvents={events}/>
+    <RequestsDashboard initialRequests={requests} initialEvents={events} today={todayAtProperty()}/>
   </main>;
 }

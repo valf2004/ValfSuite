@@ -76,5 +76,5 @@ function shortDate(value:string){return new Intl.DateTimeFormat("it-IT",{day:"2-
 function formatStay(item:AvailabilityRequest){return `${shortDate(item.arrivalDate)} – ${shortDate(item.departureDate)}`;}
 function formatCurrency(value:number){return new Intl.NumberFormat("it-IT",{style:"currency",currency:"EUR"}).format(value/100);}
 function formatDateTime(value:string){return new Intl.DateTimeFormat("it-IT",{day:"2-digit",month:"short",hour:"2-digit",minute:"2-digit"}).format(new Date(value));}
-function eventLabel(event:AvailabilityEvent){if(event.eventType==="request_created")return "Richiesta ricevuta";if(event.eventType==="email_sent")return "Preventivo inviato";if(event.eventType==="payment_reported")return "Pagamento comunicato";return "Stato aggiornato";}
+function eventLabel(event:AvailabilityEvent){if(event.eventType==="request_created")return "Richiesta ricevuta";if(event.eventType==="email_sent")return "Preventivo inviato";if(event.eventType==="payment_reported")return "Pagamento comunicato";if(event.eventType==="payment_confirmed")return "Pagamento verificato e conferma inviata";return "Stato aggiornato";}
 function capitalize(value:string){return value.charAt(0).toUpperCase()+value.slice(1);}

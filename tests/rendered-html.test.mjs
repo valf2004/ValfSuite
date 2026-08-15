@@ -207,3 +207,40 @@ test("shows overlapping requests in a protected booking calendar", async () => {
   assert.match(statusRoute,/data\.force!==true/);
   assert.match(statusRoute,/Sovrapposizione confermata manualmente/);
 });
+
+test("confirms verified payments and tracks the remaining balance", async () => {
+  const [route,dashboard,schema,repository,postgresRepository,mailer,paymentPage,paymentRoute,paymentForm] = await Promise.all([
+    source("app/api/gestione/conferma/route.ts"),
+    source("app/area-privata/RequestsDashboard.tsx"),
+    source("db/schema.ts"),
+    source("db/availability.ts"),
+    source("db/availability.postgres.ts"),
+    source("app/lib/availability-email.ts"),
+    source("app/pagamento/[token]/page.tsx"),
+    source("app/api/pagamento/[token]/route.ts"),
+    source("app/pagamento/[token]/PaymentForm.tsx"),
+  ]);
+  assert.match(route,/privateUserFromCookie/);
+  assert.match(route,/sendPaymentConfirmationEmail/);
+  assert.match(route,/recordPaymentConfirmation/);
+  assert.match(route,/confirmedCents/);
+  assert.match(route,/remainingAfter/);
+  assert.match(route,/todayAtProperty\(\)>=dueDate/);
+  assert.match(route,/7 giorni prima dell’arrivo/);
+  assert.match(route,/meno di 7 giorni all’arrivo/);
+  assert.match(dashboard,/Conferma pagamento/);
+  assert.match(dashboard,/Saldo da versare:/);
+  assert.match(dashboard,/payment-confirmation-form/);
+  assert.match(dashboard,/\{ISTRUZIONI_SALDO\}/);
+  assert.match(schema,/payment_confirmed/);
+  assert.match(repository,/recordPaymentConfirmation/);
+  assert.match(postgresRepository,/recordPaymentConfirmation/);
+  assert.match(repository,/fullyPaid/);
+  assert.match(mailer,/sendPaymentConfirmationEmail/);
+  assert.match(paymentPage,/"accepted"/);
+  assert.match(paymentPage,/confirmedCents=\{quote\.confirmedAmountCents\}/);
+  assert.match(paymentRoute,/"accepted"/);
+  assert.match(paymentForm,/remainingCents=Math\.max\(0,totalCents-confirmedCents\)/);
+  assert.match(paymentForm,/confirmedCents>0\?remainingCents/);
+  assert.match(paymentForm,/Saldo residuo/);
+});

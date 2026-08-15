@@ -8,8 +8,9 @@ export type AvailabilityRecord = typeof availabilityRequests.$inferSelect;
 export type NewAvailabilityRecord = typeof availabilityRequests.$inferInsert;
 export type AvailabilityEvent = typeof availabilityEvents.$inferSelect;
 type NewAvailabilityEvent = Pick<AvailabilityEvent,"requestId"|"eventType"|"createdAt"> & Partial<Omit<AvailabilityEvent,"id"|"requestId"|"eventType"|"createdAt">> & { id?:string };
-export type PublicQuote = { quoteId:string; requestId:string; name:string; email:string; arrivalDate:string; departureDate:string; guestCount:number; language:string; amountCents:number; status:AvailabilityStatus };
+export type PublicQuote = { quoteId:string; requestId:string; name:string; email:string; arrivalDate:string; departureDate:string; guestCount:number; language:string; amountCents:number; confirmedAmountCents:number; status:AvailabilityStatus };
 export type SentQuote = { id:string; requestId:string; amountCents:number; subject:string; body:string; tokenHash:string; actorEmail?:string };
+export type PaymentConfirmationInput = { requestId:string; amountCents:number; subject:string; body:string; actorEmail:string; fullyPaid:boolean };
 export type PaymentSubmissionInput = { id:string; quoteId:string; requestId:string; method:PaymentMethod; paidAmountCents:number; paidAt:string; paymentReference:string; message:string; receiptKey:string|null; receiptName:string|null; receiptContentType:string|null; receiptSize:number|null; createdAt:string };
 
 const usesPostgres=()=>Boolean(process.env["DATABASE_URL"]?.trim());
@@ -46,10 +47,20 @@ export async function recordSentQuote(quote:SentQuote){
   return updated;
 }
 
+export async function recordPaymentConfirmation(input:PaymentConfirmationInput){
+  if(usesPostgres())return (await postgresRepository()).recordPaymentConfirmation(input);
+  const {getDb}=await import(".");const db=getDb();const current=await db.select().from(availabilityRequests).where(eq(availabilityRequests.id,input.requestId));const createdAt=new Date().toISOString();
+  if(input.fullyPaid)await db.update(availabilityQuotes).set({active:false}).where(eq(availabilityQuotes.requestId,input.requestId));
+  const updated=await db.update(availabilityRequests).set({status:"accepted",archiveOutcome:null,updatedAt:createdAt}).where(eq(availabilityRequests.id,input.requestId)).returning();
+  if(updated.length)await recordAvailabilityEvent({requestId:input.requestId,eventType:"payment_confirmed",fromStatus:current[0]?.status??null,toStatus:"accepted",actorEmail:input.actorEmail,note:"Pagamento verificato e conferma inviata al cliente",subject:input.subject,body:input.body,amountCents:input.amountCents,createdAt});
+  return updated;
+}
+
 export async function findActiveQuoteByTokenHash(tokenHash:string):Promise<PublicQuote|null>{
   if(usesPostgres())return (await postgresRepository()).findActiveQuoteByTokenHash(tokenHash);
-  const {getDb}=await import(".");const rows=await getDb().select({quoteId:availabilityQuotes.id,requestId:availabilityQuotes.requestId,amountCents:availabilityQuotes.amountCents,name:availabilityRequests.name,email:availabilityRequests.email,arrivalDate:availabilityRequests.arrivalDate,departureDate:availabilityRequests.departureDate,guestCount:availabilityRequests.guestCount,language:availabilityRequests.language,status:availabilityRequests.status}).from(availabilityQuotes).innerJoin(availabilityRequests,eq(availabilityQuotes.requestId,availabilityRequests.id)).where(and(eq(availabilityQuotes.tokenHash,tokenHash),eq(availabilityQuotes.active,true))).limit(1);
-  return rows[0]??null;
+  const {getDb}=await import(".");const db=getDb();const rows=await db.select({quoteId:availabilityQuotes.id,requestId:availabilityQuotes.requestId,amountCents:availabilityQuotes.amountCents,name:availabilityRequests.name,email:availabilityRequests.email,arrivalDate:availabilityRequests.arrivalDate,departureDate:availabilityRequests.departureDate,guestCount:availabilityRequests.guestCount,language:availabilityRequests.language,status:availabilityRequests.status}).from(availabilityQuotes).innerJoin(availabilityRequests,eq(availabilityQuotes.requestId,availabilityRequests.id)).where(and(eq(availabilityQuotes.tokenHash,tokenHash),eq(availabilityQuotes.active,true))).limit(1);
+  if(!rows[0])return null;const confirmed=await db.select({amountCents:availabilityEvents.amountCents}).from(availabilityEvents).where(and(eq(availabilityEvents.requestId,rows[0].requestId),eq(availabilityEvents.eventType,"payment_confirmed")));
+  return {...rows[0],confirmedAmountCents:confirmed.reduce((total,event)=>total+(event.amountCents||0),0)};
 }
 
 export async function createPaymentSubmission(input:PaymentSubmissionInput){
