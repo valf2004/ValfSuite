@@ -14,7 +14,8 @@ export type PublicQuote = {
   guestCount:number; language:string; amountCents:number; confirmedAmountCents:number; status:AvailabilityStatus;
 };
 export type SentQuote = { id:string; requestId:string; amountCents:number; subject:string; body:string; tokenHash:string; actorEmail?:string };
-export type PaymentConfirmationInput = { requestId:string; amountCents:number; subject:string; body:string; actorEmail:string; fullyPaid:boolean };
+export type PaymentConfirmationInput = { requestId:string; amountCents:number; subject:string; body:string; actorEmail:string; fullyPaid:boolean; nextPaymentTokenHash?:string|null; targetStatus?:"accepted"|"checked_in"|"police_registered" };
+export type GuestCommunicationInput = { requestId:string; eventType:"balance_requested"|"checkin_invited"; subject:string; body:string; note:string; actorEmail:string; paymentTokenHash?:string|null };
 export type PaymentSubmissionInput = {
   id:string; quoteId:string; requestId:string; method:PaymentMethod; paidAmountCents:number; paidAt:string;
   paymentReference:string; message:string; receiptKey:string|null; receiptName:string|null;
@@ -67,8 +68,27 @@ export async function recordPaymentConfirmation(input:PaymentConfirmationInput) 
   const current=await sql`SELECT status FROM availability_requests WHERE id=${input.requestId}`;
   const createdAt=new Date().toISOString();
   if(input.fullyPaid)await sql`UPDATE availability_quotes SET active=false WHERE request_id=${input.requestId}`;
-  const rows=await sql`UPDATE availability_requests SET status='accepted',archive_outcome=NULL,updated_at=${createdAt} WHERE id=${input.requestId} RETURNING *`;
-  if(rows.length)await insertEvent({requestId:input.requestId,eventType:"payment_confirmed",fromStatus:current[0]?.status==null?null:String(current[0].status),toStatus:"accepted",actorEmail:input.actorEmail,note:"Pagamento verificato e conferma inviata al cliente",subject:input.subject,body:input.body,amountCents:input.amountCents,createdAt});
+  else if(input.nextPaymentTokenHash)await sql`UPDATE availability_quotes SET token_hash=${input.nextPaymentTokenHash} WHERE request_id=${input.requestId} AND active=true`;
+  const targetStatus=input.targetStatus||"accepted";
+  const rows=await sql`UPDATE availability_requests SET status=${targetStatus},archive_outcome=NULL,updated_at=${createdAt} WHERE id=${input.requestId} RETURNING *`;
+  if(rows.length)await insertEvent({requestId:input.requestId,eventType:"payment_confirmed",fromStatus:current[0]?.status==null?null:String(current[0].status),toStatus:targetStatus,actorEmail:input.actorEmail,note:"Pagamento verificato e conferma inviata al cliente",subject:input.subject,body:input.body,amountCents:input.amountCents,createdAt});
+  return rows.map(mapRow);
+}
+
+export async function recordGuestCommunication(input:GuestCommunicationInput) {
+  await ready();
+  const createdAt=new Date().toISOString();
+  if(input.paymentTokenHash)await sql`UPDATE availability_quotes SET token_hash=${input.paymentTokenHash} WHERE request_id=${input.requestId} AND active=true`;
+  const rows=await sql`UPDATE availability_requests SET updated_at=${createdAt} WHERE id=${input.requestId} RETURNING *`;
+  if(rows.length)await insertEvent({requestId:input.requestId,eventType:input.eventType,toStatus:String(rows[0].status),actorEmail:input.actorEmail,note:input.note,subject:input.subject,body:input.body,createdAt});
+  return rows.map(mapRow);
+}
+
+export async function recordCheckinSubmission(requestId:string,body:string) {
+  await ready();
+  const current=await sql`SELECT status FROM availability_requests WHERE id=${requestId}`;const createdAt=new Date().toISOString();
+  const rows=await sql`UPDATE availability_requests SET status='checked_in',archive_outcome=NULL,updated_at=${createdAt} WHERE id=${requestId} RETURNING *`;
+  if(rows.length)await insertEvent({requestId,eventType:"checkin_submitted",fromStatus:current[0]?.status==null?null:String(current[0].status),toStatus:"checked_in",note:"Check-in online completato dall’ospite",body,createdAt});
   return rows.map(mapRow);
 }
 

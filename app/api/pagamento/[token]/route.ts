@@ -11,7 +11,7 @@ export async function POST(request:Request,{params}:{params:Promise<{token:strin
     const {token}=await params;
     if(!token||token.length!==64)return Response.json({message:"Collegamento non valido."},{status:404});
     const quote=await findActiveQuoteByTokenHash(await hashPaymentToken(token));
-    if(!quote||!["quote_sent","payment_reported","accepted"].includes(quote.status))return Response.json({message:"La proposta non è più disponibile."},{status:409});
+    if(!quote||!["quote_sent","payment_reported","accepted","checked_in","police_registered"].includes(quote.status))return Response.json({message:"La proposta non è più disponibile."},{status:409});
     const form=await request.formData();
     const method=String(form.get("method")||"") as PaymentMethod;
     const paidAt=String(form.get("paidAt")||"").trim();

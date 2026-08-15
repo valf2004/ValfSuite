@@ -10,7 +10,8 @@ export type AvailabilityEvent = typeof availabilityEvents.$inferSelect;
 type NewAvailabilityEvent = Pick<AvailabilityEvent,"requestId"|"eventType"|"createdAt"> & Partial<Omit<AvailabilityEvent,"id"|"requestId"|"eventType"|"createdAt">> & { id?:string };
 export type PublicQuote = { quoteId:string; requestId:string; name:string; email:string; arrivalDate:string; departureDate:string; guestCount:number; language:string; amountCents:number; confirmedAmountCents:number; status:AvailabilityStatus };
 export type SentQuote = { id:string; requestId:string; amountCents:number; subject:string; body:string; tokenHash:string; actorEmail?:string };
-export type PaymentConfirmationInput = { requestId:string; amountCents:number; subject:string; body:string; actorEmail:string; fullyPaid:boolean };
+export type PaymentConfirmationInput = { requestId:string; amountCents:number; subject:string; body:string; actorEmail:string; fullyPaid:boolean; nextPaymentTokenHash?:string|null; targetStatus?:"accepted"|"checked_in"|"police_registered" };
+export type GuestCommunicationInput = { requestId:string; eventType:"balance_requested"|"checkin_invited"; subject:string; body:string; note:string; actorEmail:string; paymentTokenHash?:string|null };
 export type PaymentSubmissionInput = { id:string; quoteId:string; requestId:string; method:PaymentMethod; paidAmountCents:number; paidAt:string; paymentReference:string; message:string; receiptKey:string|null; receiptName:string|null; receiptContentType:string|null; receiptSize:number|null; createdAt:string };
 
 const usesPostgres=()=>Boolean(process.env["DATABASE_URL"]?.trim());
@@ -51,8 +52,27 @@ export async function recordPaymentConfirmation(input:PaymentConfirmationInput){
   if(usesPostgres())return (await postgresRepository()).recordPaymentConfirmation(input);
   const {getDb}=await import(".");const db=getDb();const current=await db.select().from(availabilityRequests).where(eq(availabilityRequests.id,input.requestId));const createdAt=new Date().toISOString();
   if(input.fullyPaid)await db.update(availabilityQuotes).set({active:false}).where(eq(availabilityQuotes.requestId,input.requestId));
-  const updated=await db.update(availabilityRequests).set({status:"accepted",archiveOutcome:null,updatedAt:createdAt}).where(eq(availabilityRequests.id,input.requestId)).returning();
-  if(updated.length)await recordAvailabilityEvent({requestId:input.requestId,eventType:"payment_confirmed",fromStatus:current[0]?.status??null,toStatus:"accepted",actorEmail:input.actorEmail,note:"Pagamento verificato e conferma inviata al cliente",subject:input.subject,body:input.body,amountCents:input.amountCents,createdAt});
+  else if(input.nextPaymentTokenHash)await db.update(availabilityQuotes).set({tokenHash:input.nextPaymentTokenHash}).where(and(eq(availabilityQuotes.requestId,input.requestId),eq(availabilityQuotes.active,true)));
+  const targetStatus=input.targetStatus||"accepted";
+  const updated=await db.update(availabilityRequests).set({status:targetStatus,archiveOutcome:null,updatedAt:createdAt}).where(eq(availabilityRequests.id,input.requestId)).returning();
+  if(updated.length)await recordAvailabilityEvent({requestId:input.requestId,eventType:"payment_confirmed",fromStatus:current[0]?.status??null,toStatus:targetStatus,actorEmail:input.actorEmail,note:"Pagamento verificato e conferma inviata al cliente",subject:input.subject,body:input.body,amountCents:input.amountCents,createdAt});
+  return updated;
+}
+
+export async function recordGuestCommunication(input:GuestCommunicationInput){
+  if(usesPostgres())return (await postgresRepository()).recordGuestCommunication(input);
+  const {getDb}=await import(".");const db=getDb();const createdAt=new Date().toISOString();
+  if(input.paymentTokenHash)await db.update(availabilityQuotes).set({tokenHash:input.paymentTokenHash}).where(and(eq(availabilityQuotes.requestId,input.requestId),eq(availabilityQuotes.active,true)));
+  const updated=await db.update(availabilityRequests).set({updatedAt:createdAt}).where(eq(availabilityRequests.id,input.requestId)).returning();
+  if(updated.length)await recordAvailabilityEvent({requestId:input.requestId,eventType:input.eventType,toStatus:updated[0].status,actorEmail:input.actorEmail,note:input.note,subject:input.subject,body:input.body,createdAt});
+  return updated;
+}
+
+export async function recordCheckinSubmission(requestId:string,body:string){
+  if(usesPostgres())return (await postgresRepository()).recordCheckinSubmission(requestId,body);
+  const {getDb}=await import(".");const db=getDb();const current=await db.select().from(availabilityRequests).where(eq(availabilityRequests.id,requestId));const createdAt=new Date().toISOString();
+  const updated=await db.update(availabilityRequests).set({status:"checked_in",archiveOutcome:null,updatedAt:createdAt}).where(eq(availabilityRequests.id,requestId)).returning();
+  if(updated.length)await recordAvailabilityEvent({requestId,eventType:"checkin_submitted",fromStatus:current[0]?.status??null,toStatus:"checked_in",note:"Check-in online completato dall’ospite",body,createdAt});
   return updated;
 }
 

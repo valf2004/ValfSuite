@@ -244,3 +244,47 @@ test("confirms verified payments and tracks the remaining balance", async () => 
   assert.match(paymentForm,/confirmedCents>0\?remainingCents/);
   assert.match(paymentForm,/Saldo residuo/);
 });
+
+test("sends balance and check-in links through the accepted booking workflow", async () => {
+  const [dashboard,confirmation,balanceRoute,inviteRoute,checkinRoute,checkinPage,checkinForm,tokenHelper,repository,postgresRepository,schema,mailer,paymentRoute] = await Promise.all([
+    source("app/area-privata/RequestsDashboard.tsx"),
+    source("app/api/gestione/conferma/route.ts"),
+    source("app/api/gestione/saldo/route.ts"),
+    source("app/api/gestione/checkin-invito/route.ts"),
+    source("app/api/checkin/[token]/route.ts"),
+    source("app/checkin/[token]/page.tsx"),
+    source("app/checkin/GuestCheckin.tsx"),
+    source("app/lib/checkin-token.ts"),
+    source("db/availability.ts"),
+    source("db/availability.postgres.ts"),
+    source("db/schema.ts"),
+    source("app/lib/availability-email.ts"),
+    source("app/api/pagamento/[token]/route.ts"),
+  ]);
+  assert.match(dashboard,/Richiedi saldo/);
+  assert.match(dashboard,/Invita al check-in/);
+  assert.match(dashboard,/balanceRequestTemplate/);
+  assert.match(dashboard,/checkinInviteTemplate/);
+  assert.match(dashboard,/{ISTRUZIONI_PROSSIMO_PASSO}/);
+  assert.match(confirmation,/nextPaymentTokenHash/);
+  assert.match(confirmation,/createCheckinToken/);
+  assert.match(confirmation,/nextStepInstruction/);
+  assert.match(balanceRoute,/recordGuestCommunication/);
+  assert.match(balanceRoute,/{LINK_SALDO}/);
+  assert.match(inviteRoute,/createCheckinToken/);
+  assert.match(inviteRoute,/{LINK_CHECKIN}/);
+  assert.match(checkinRoute,/verifyCheckinToken/);
+  assert.match(checkinRoute,/recordCheckinSubmission/);
+  assert.match(checkinPage,/booking=\{\{/);
+  assert.match(checkinForm,/\/api\/checkin\/\$\{token\}/);
+  assert.match(checkinForm,/Check-in protetto/);
+  assert.match(tokenHelper,/new SignJWT/);
+  assert.match(tokenHelper,/jwtVerify/);
+  assert.match(repository,/recordGuestCommunication/);
+  assert.match(repository,/recordCheckinSubmission/);
+  assert.match(postgresRepository,/recordGuestCommunication/);
+  assert.match(postgresRepository,/recordCheckinSubmission/);
+  for(const eventType of ["balance_requested","checkin_invited","checkin_submitted"])assert.match(schema,new RegExp(eventType));
+  assert.match(mailer,/actionUrl\?:string/);
+  assert.match(paymentRoute,/"checked_in","police_registered"/);
+});

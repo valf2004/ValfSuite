@@ -5,6 +5,7 @@ import Link from "next/link";
 import Image from "next/image";
 
 type Lang = "it" | "en" | "fr" | "es" | "de";
+type Booking = { id:string; name:string; arrivalDate:string; departureDate:string; guestCount:number; language:string; alreadyCompleted:boolean };
 
 const languageNames: Record<Lang, string> = { it: "Italiano", en: "English", fr: "Français", es: "Español", de: "Deutsch" };
 const text: Record<Lang, Record<string, string>> = {
@@ -33,12 +34,23 @@ const dateText: Record<Lang, { pastArrival:string; departureOrder:string; future
   de: { pastArrival:"Das Anreisedatum darf nicht vor dem heutigen Datum liegen.", departureOrder:"Die Abreise muss nach der Anreise liegen.", futureBirth:"Das Geburtsdatum darf nicht in der Zukunft liegen.", oldBirth:"Bitte prüfen Sie das Geburtsdatum: Es darf nicht mehr als 120 Jahre zurückliegen.", adultLead:"Der Hauptgast muss mindestens 18 Jahre alt sein." },
 };
 
-export function GuestCheckin() {
-  const [lang, setLang] = useState<Lang>("it");
+const liveText:Record<Lang,{badge:string;badgeText:string;complete:string;completeText:string;error:string}>={
+  it:{badge:"Check-in protetto",badgeText:"I dati saranno associati esclusivamente alla tua prenotazione.",complete:"Check-in online completato",completeText:"Grazie. Abbiamo registrato i dati del soggiorno; Angela verificherà i documenti originali al vostro arrivo.",error:"Non è stato possibile inviare il check-in. Controlla i dati e riprova."},
+  en:{badge:"Secure check-in",badgeText:"Your details will be associated only with your booking.",complete:"Online check-in completed",completeText:"Thank you. We have recorded your stay details; Angela will check the original documents on arrival.",error:"We could not submit the check-in. Please review your details and try again."},
+  fr:{badge:"Check-in sécurisé",badgeText:"Vos données seront associées uniquement à votre réservation.",complete:"Check-in en ligne terminé",completeText:"Merci. Nous avons enregistré les informations du séjour ; Angela vérifiera les documents originaux à votre arrivée.",error:"Le check-in n’a pas pu être envoyé. Vérifiez les informations et réessayez."},
+  es:{badge:"Check-in seguro",badgeText:"Los datos se asociarán únicamente a tu reserva.",complete:"Check-in online completado",completeText:"Gracias. Hemos registrado los datos de la estancia; Angela comprobará los documentos originales a la llegada.",error:"No se pudo enviar el check-in. Revisa los datos e inténtalo de nuevo."},
+  de:{badge:"Sicherer Check-in",badgeText:"Ihre Angaben werden ausschließlich Ihrer Buchung zugeordnet.",complete:"Online-Check-in abgeschlossen",completeText:"Vielen Dank. Wir haben Ihre Aufenthaltsdaten gespeichert; Angela prüft die Originaldokumente bei der Anreise.",error:"Der Check-in konnte nicht übermittelt werden. Prüfen Sie Ihre Angaben und versuchen Sie es erneut."},
+};
+
+export function GuestCheckin({token,booking}:{token?:string;booking?:Booking}={}) {
+  const initialLang=(booking?.language&&booking.language in languageNames?booking.language:"it") as Lang;
+  const [lang, setLang] = useState<Lang>(initialLang);
   const [step, setStep] = useState(0);
-  const [guestCount, setGuestCount] = useState(2);
+  const [guestCount, setGuestCount] = useState(booking?.guestCount||2);
   const [complete, setComplete] = useState(false);
-  const [values, setValues] = useState<Record<string,string>>({ reference: "VALF-DEMO-01" });
+  const [submitting,setSubmitting]=useState(false);
+  const [submitError,setSubmitError]=useState("");
+  const [values, setValues] = useState<Record<string,string>>(booking?{reference:booking.id,"arrival-date":booking.arrivalDate,"departure-date":booking.departureDate}:{ reference: "VALF-DEMO-01" });
   const [dateError, setDateError] = useState("");
   const [dateErrorFields, setDateErrorFields] = useState<string[]>([]);
   const t = text[lang];
@@ -49,7 +61,7 @@ export function GuestCheckin() {
   const adultBirthDate = shiftYears(today, -18);
   const companions = useMemo(() => Array.from({ length: Math.max(0, guestCount - 1) }), [guestCount]);
 
-  function submit(event: FormEvent<HTMLFormElement>) {
+  async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const error = validateCurrentDates(step, values, today, oldestBirthDate, adultBirthDate, d);
     if (error) {
@@ -61,28 +73,35 @@ export function GuestCheckin() {
     setDateError("");
     setDateErrorFields([]);
     if (step < steps.length - 1) setStep(step + 1);
-    else setComplete(true);
+    else if(booking&&token){
+      setSubmitting(true);setSubmitError("");
+      try{
+        const response=await fetch(`/api/checkin/${token}`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({guestCount,language:lang,values,privacyAccepted:true})});
+        if(response.ok)setComplete(true);else{const data=await response.json().catch(()=>({}));setSubmitError(data.message||liveText[lang].error);}
+      }catch{setSubmitError(liveText[lang].error);}
+      finally{setSubmitting(false);}
+    }else setComplete(true);
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
-  if (complete) return <main className="checkin-page"><CheckinHeader lang={lang} setLang={setLang}/><section className="checkin-complete"><span>✓</span><p className="eyebrow">VALF Suite</p><h1>{t.complete}</h1><p>{t.completeText}</p><Link className="button" href={lang === "it" ? "/" : `/${lang}`} onClick={event => navigateHome(event, lang)}>{t.home}</Link></section></main>;
+  if (complete||booking?.alreadyCompleted) return <main className="checkin-page"><CheckinHeader lang={lang} setLang={setLang}/><section className="checkin-complete"><span>✓</span><p className="eyebrow">VALF Suite</p><h1>{booking?liveText[lang].complete:t.complete}</h1><p>{booking?liveText[lang].completeText:t.completeText}</p><Link className="button" href={lang === "it" ? "/" : `/${lang}`} onClick={event => navigateHome(event, lang)}>{t.home}</Link></section></main>;
 
   return <main className="checkin-page">
     <CheckinHeader lang={lang} setLang={setLang}/>
-    <div className="checkin-demo"><strong>{t.demo}</strong><span>{t.demoText}</span></div>
+    <div className="checkin-demo"><strong>{booking?liveText[lang].badge:t.demo}</strong><span>{booking?liveText[lang].badgeText:t.demoText}</span></div>
     <section className="checkin-intro"><p className="eyebrow">VALF Suite · Arcola</p><h1>{t.title}</h1><p>{t.intro}</p></section>
     <section className="checkin-shell">
       <ol className="checkin-progress" aria-label="Progress">
         {steps.map((key, index) => <li key={key} className={index === step ? "active" : index < step ? "done" : ""} aria-current={index === step ? "step" : undefined}><span>{index < step ? "✓" : index + 1}</span><b>{key === "arrival" ? a.step : t[key]}</b></li>)}
       </ol>
       <form className="checkin-form" onSubmit={submit} onInvalid={event => { const target = event.target as HTMLInputElement; if (target.type !== "date") return; event.preventDefault(); const message = target.name === "arrival-date" ? d.pastArrival : target.name === "departure-date" ? d.departureOrder : target.name === "lead-birth" && target.validity.rangeOverflow ? d.adultLead : target.validity.rangeUnderflow ? d.oldBirth : d.futureBirth; setDateError(message); setDateErrorFields([target.name]); requestAnimationFrame(() => target.focus()); }} onChange={event => { const target = event.target as HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement; if (target.name) { setDateError(""); setDateErrorFields([]); setValues(current => ({ ...current, [target.name]: target.value })); } }}>
-        {dateError && <p id="form-date-error" className="form-error" role="alert">{dateError}</p>}
-        {step === 0 && <fieldset><legend>{t.stay}</legend><p className="form-help">VALF Suite · Via Aurelia Nord 97, Arcola (SP)</p><div className="checkin-grid"><Field label={t.arrival} name="arrival-date" type="date" min={today} defaultValue={values["arrival-date"]} invalid={dateErrorFields.includes("arrival-date")}/><Field label={t.departure} name="departure-date" type="date" min={values["arrival-date"] ? nextDay(values["arrival-date"]) : nextDay(today)} defaultValue={values["departure-date"]} invalid={dateErrorFields.includes("departure-date")}/><label>{t.count}<select value={guestCount} onChange={e=>setGuestCount(Number(e.target.value))}>{[1,2,3,4].map(n=><option key={n} value={n}>{n}</option>)}</select></label><Field label={t.reference} name="reference" defaultValue={values.reference}/></div></fieldset>}
+        {(dateError||submitError) && <p id="form-date-error" className="form-error" role="alert">{dateError||submitError}</p>}
+        {step === 0 && <fieldset><legend>{t.stay}</legend><p className="form-help">VALF Suite · Via Aurelia Nord 97, Arcola (SP)</p><div className="checkin-grid"><Field label={t.arrival} name="arrival-date" type="date" min={today} defaultValue={values["arrival-date"]} invalid={dateErrorFields.includes("arrival-date")}/><Field label={t.departure} name="departure-date" type="date" min={values["arrival-date"] ? nextDay(values["arrival-date"]) : nextDay(today)} defaultValue={values["departure-date"]} invalid={dateErrorFields.includes("departure-date")}/><label>{t.count}<select value={guestCount} disabled={Boolean(booking)} onChange={e=>setGuestCount(Number(e.target.value))}>{[1,2,3,4].map(n=><option key={n} value={n}>{n}</option>)}</select></label><Field label={t.reference} name="reference" defaultValue={values.reference}/></div></fieldset>}
         {step === 1 && <fieldset><legend>{t.lead}</legend><p className="form-help">{t.legal}</p><PersonFields t={t} values={values} prefix="lead" minBirth={oldestBirthDate} maxBirth={adultBirthDate} invalidFields={dateErrorFields} document/></fieldset>}
         {step === 2 && <fieldset><legend>{t.guests}</legend>{companions.length === 0 ? <p className="empty-guests">—</p> : companions.map((_, index)=><section className="companion" key={index}><h2>{t.guests} {index + 1}</h2><PersonFields t={t} values={values} prefix={`guest-${index + 1}`} minBirth={oldestBirthDate} maxBirth={today} invalidFields={dateErrorFields}/></section>)}</fieldset>}
         {step === 3 && <fieldset><legend>{a.step}</legend><p className="form-help">{a.help}</p><div className="checkin-grid"><Field label={a.time} name="arrival-time" type="time" defaultValue={values["arrival-time"]}/><label>{a.transport}<select name="transport" required defaultValue={values.transport || ""}><option value="" disabled>{t.choose}</option><option>{a.car}</option><option>{a.train}</option><option>{a.plane}</option><option>{a.other}</option></select></label><label className="field-wide">{a.notes}<textarea name="arrival-notes" rows={5} defaultValue={values["arrival-notes"]}/></label></div></fieldset>}
         {step === 4 && <fieldset><legend>{t.review}</legend><div className="review-card"><div><small>{t.stay}</small><strong>{values["arrival-date"] || "—"} → {values["departure-date"] || "—"}</strong><span>{guestCount} {t.count.toLowerCase()}</span></div><div><small>{t.reference}</small><strong>{values.reference || "—"}</strong><span>{values["lead-name"]} {values["lead-surname"]}</span></div><div><small>{a.step}</small><strong>{values.transport || "—"} · {values["arrival-time"] || "—"}</strong><span>{values["arrival-notes"] || a.help}</span></div></div><p className="legal-note">{t.legal}</p><label className="checkin-consent"><input type="checkbox" required/><span>{t.privacy}</span></label></fieldset>}
-        <div className="checkin-actions">{step > 0 && <button type="button" className="button-secondary" onClick={()=>setStep(step-1)}>{t.back}</button>}<button className="button" type="submit">{step === steps.length - 1 ? t.send : t.next}</button></div>
+        <div className="checkin-actions">{step > 0 && <button type="button" className="button-secondary" disabled={submitting} onClick={()=>setStep(step-1)}>{t.back}</button>}<button className="button" type="submit" disabled={submitting}>{submitting?"…":step === steps.length - 1 ? t.send : t.next}</button></div>
       </form>
     </section>
     <footer className="checkin-footer">© {new Date().getFullYear()} VALF Suite · <a href="mailto:valfsuite@gmail.com">valfsuite@gmail.com</a></footer>
