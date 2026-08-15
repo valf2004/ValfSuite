@@ -179,3 +179,27 @@ test("confirms each availability request to the guest in their language", async 
   for (const language of ["it", "en", "fr", "es", "de"]) assert.match(mailer, new RegExp(`${language}:\\{subject:`));
   assert.match(mailer, /non costituisce ancora una prenotazione/);
 });
+
+test("shows overlapping requests in a protected booking calendar", async () => {
+  const [calendarPage,calendar,chrome,styles,statusRoute] = await Promise.all([
+    source("app/area-riservata/calendario/page.tsx"),
+    source("app/area-privata/BookingCalendar.tsx"),
+    source("app/area-privata/PrivateChrome.tsx"),
+    source("app/checkin.css"),
+    source("app/api/gestione/richieste/route.ts"),
+  ]);
+  assert.match(calendarPage,/privateUserFromCookie/);
+  assert.match(calendarPage,/robots:\{index:false,follow:false\}/);
+  assert.match(chrome,/area-riservata\/calendario/);
+  assert.match(calendar,/Calendario prenotazioni/);
+  assert.match(calendar,/items\.slice\(0,3\)/);
+  assert.match(calendar,/\+ altre/);
+  assert.match(calendar,/item\.departureDate>key/);
+  assert.match(calendar,/confirmedStatuses/);
+  for(const status of ["quote_requested","quote_sent","payment_reported","accepted","checked_in","police_registered","archived"])assert.match(calendar,new RegExp(status));
+  assert.match(styles,/booking-calendar/);
+  assert.match(styles,/calendar-event\.tentative/);
+  assert.match(statusRoute,/target\.arrivalDate<item\.departureDate&&target\.departureDate>item\.arrivalDate/);
+  assert.match(statusRoute,/data\.force!==true/);
+  assert.match(statusRoute,/Sovrapposizione confermata manualmente/);
+});
