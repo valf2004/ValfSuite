@@ -98,6 +98,8 @@
 .private-login > section { width:min(600px,100%); margin:70px auto; padding:58px; background:white; box-shadow:0 25px 80px rgba(74,58,44,.12); text-align:center; }
 .private-login h1 { font-size:clamp(52px,7vw,76px); }
 .private-login section > p:not(.eyebrow) { color:#62564c; margin:24px auto 32px; max-width:480px; }
+.private-login .private-session-expired { display:flex; flex-direction:column; gap:3px; margin:20px auto 0; padding:12px 16px; border:1px solid #c85b4a; border-radius:5px; color:#7f2f25; background:#fff3f1; }
+.private-session-expired span { font-size:14px; }
 .google-login { display:flex; align-items:center; justify-content:center; gap:14px; width:100%; min-height:54px; border:1px solid #c9c5c0; border-radius:5px; text-decoration:none; color:#2f2a25; font-weight:600; background:white; }
 .google-login:hover { border-color:#1f6f68; }
 .google-login span { font:bold 22px Arial,sans-serif; color:#4285f4; }

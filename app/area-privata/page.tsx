@@ -7,10 +7,11 @@ import {todayAtProperty} from "../lib/property-date";
 
 export const dynamic = "force-dynamic";
 
-export default async function PrivateAreaPage() {
+export default async function PrivateAreaPage({searchParams}:{searchParams?:Promise<{sessione?:string|string[]}>}) {
   const requestHeaders = await headers();
   const user = await privateUserFromCookie(requestHeaders.get("cookie"));
-  if (!user) return <PrivateLogin configured={authIsConfigured()}/>;
+  const query=searchParams?await searchParams:{};
+  if (!user) return <PrivateLogin configured={authIsConfigured()} sessionExpired={query.sessione==="scaduta"}/>;
   const [requests,events] = await Promise.all([listAvailabilityRequests(),listAvailabilityEvents()]);
   return <PrivateDashboard user={user} requests={requests} events={events}/>;
 }

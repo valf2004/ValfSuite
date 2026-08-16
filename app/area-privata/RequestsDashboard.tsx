@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { authenticatedFetch } from "./authenticated-fetch";
 
 export type AvailabilityRequest = {
   id: string; status: Status; paymentStatus: PaymentStatus; archiveOutcome: ArchiveOutcome | null; name: string; email: string; arrivalDate: string;
@@ -41,7 +42,7 @@ export default function RequestsDashboard({ initialRequests, initialEvents, toda
   async function move(id: string, status: Status, archiveOutcome?: ArchiveOutcome, note?:string, force=false):Promise<MoveResult> {
     setBusy(id); setNotice("");
     try{
-      const response = await fetch("/api/gestione/richieste", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id, status, archiveOutcome, note, force }) });
+      const response = await authenticatedFetch("/api/gestione/richieste", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id, status, archiveOutcome, note, force }) });
       const data = await response.json().catch(() => ({}));
       if(response.status===409&&Array.isArray(data.conflicts))return {ok:false,conflicts:data.conflicts};
       if (response.ok) { setRequests(current => current.map(item => item.id === id ? data.request : item)); if(data.event)setEvents(current=>[...current,data.event]); setNotice("Stato aggiornato."); return {ok:true}; }
@@ -56,7 +57,7 @@ export default function RequestsDashboard({ initialRequests, initialEvents, toda
   }
   async function sendQuote(item: AvailabilityRequest) {
     setBusy(item.id); setNotice("");
-    const response = await fetch("/api/gestione/preventivo", { method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({ id:item.id, ...quoteDraft }) });
+    const response = await authenticatedFetch("/api/gestione/preventivo", { method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({ id:item.id, ...quoteDraft }) });
     const data = await response.json().catch(() => ({}));
     if (response.ok) { setRequests(current => current.map(row => row.id === item.id ? data.request : row)); if(data.event)setEvents(current=>[...current,data.event]); setQuoteFor(null); setNotice(`Preventivo inviato a ${item.email}.`); }
     else setNotice(data.message || "Invio del preventivo non riuscito.");
@@ -66,7 +67,7 @@ export default function RequestsDashboard({ initialRequests, initialEvents, toda
   async function sendConfirmation(item:AvailabilityRequest){
     setBusy(item.id);setNotice("");
     try{
-      const response=await fetch("/api/gestione/conferma",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({id:item.id,...confirmationDraft})});
+      const response=await authenticatedFetch("/api/gestione/conferma",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({id:item.id,...confirmationDraft})});
       const data=await response.json().catch(()=>({}));
       if(response.ok){setRequests(current=>current.map(row=>row.id===item.id?data.request:row));if(data.event)setEvents(current=>[...current,data.event]);setConfirmationFor(null);setNotice(`Conferma inviata a ${item.email}.`);}
       else setNotice(data.message||"Invio della conferma non riuscito.");
@@ -80,7 +81,7 @@ export default function RequestsDashboard({ initialRequests, initialEvents, toda
     setBusy(item.id);setNotice("");
     try{
       const endpoint=kind==="balance"?"/api/gestione/saldo":"/api/gestione/checkin-invito";
-      const response=await fetch(endpoint,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({id:item.id,...communicationDraft})});
+      const response=await authenticatedFetch(endpoint,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({id:item.id,...communicationDraft})});
       const data=await response.json().catch(()=>({}));
       if(response.ok){setRequests(current=>current.map(row=>row.id===item.id?data.request:row));if(data.event)setEvents(current=>[...current,data.event]);setCommunicationFor(null);setNotice(kind==="balance"?`Richiesta di saldo inviata a ${item.email}.`:`Invito al check-in inviato a ${item.email}.`);}
       else setNotice(data.message||(kind==="balance"?"Invio della richiesta di saldo non riuscito.":"Invio dell’invito al check-in non riuscito."));

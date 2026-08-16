@@ -320,3 +320,23 @@ test("keeps payment progress separate from booking status", async () => {
   assert.match(migration,/SET `payment_status` = 'reported'/);
   assert.match(migration,/SET `status` = COALESCE/);
 });
+
+test("returns expired private sessions to the login page", async () => {
+  const [dashboard,authenticatedFetch,privatePage,privateChrome,receiptRoute,styles] = await Promise.all([
+    source("app/area-privata/RequestsDashboard.tsx"),
+    source("app/area-privata/authenticated-fetch.ts"),
+    source("app/area-privata/page.tsx"),
+    source("app/area-privata/PrivateChrome.tsx"),
+    source("app/api/gestione/ricevute/[id]/route.ts"),
+    source("app/checkin.css"),
+  ]);
+  assert.equal((dashboard.match(/authenticatedFetch\(/g)||[]).length,4);
+  assert.match(authenticatedFetch,/response\.status !== 401/);
+  assert.match(authenticatedFetch,/window\.location\.replace/);
+  assert.match(authenticatedFetch,/sessione", "scaduta"/);
+  assert.match(privatePage,/query\.sessione==="scaduta"/);
+  assert.match(privateChrome,/La sessione è scaduta\./);
+  assert.match(privateChrome,/role="alert"/);
+  assert.match(receiptRoute,/Response\.redirect\(new URL\("\/area-riservata\?sessione=scaduta"/);
+  assert.match(styles,/\.private-session-expired/);
+});
