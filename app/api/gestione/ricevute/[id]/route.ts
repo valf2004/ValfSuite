@@ -3,10 +3,10 @@ import {getPaymentReceipt} from "../../../../../db/availability";
 import {privateUserFromCookie} from "../../../../lib/google-auth";
 import {readReceipt} from "../../../../lib/receipt-storage";
 
-export async function GET(request:Request,{params}:{params:Promise<{id:string}>}){
+export async function GET(_request:Request,{params}:{params:Promise<{id:string}>}){
   const requestHeaders=await headers();
   const user=await privateUserFromCookie(requestHeaders.get("cookie"));
-  if(!user)return Response.redirect(new URL("/area-riservata?sessione=scaduta",request.url),303);
+  if(!user)return new Response(null,{status:303,headers:{Location:"/area-riservata?sessione=scaduta"}});
   const {id}=await params;
   const metadata=await getPaymentReceipt(id);
   if(!metadata)return Response.json({message:"Ricevuta non trovata."},{status:404});

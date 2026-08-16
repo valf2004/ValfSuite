@@ -337,6 +337,6 @@ test("returns expired private sessions to the login page", async () => {
   assert.match(privatePage,/query\.sessione==="scaduta"/);
   assert.match(privateChrome,/La sessione è scaduta\./);
   assert.match(privateChrome,/role="alert"/);
-  assert.match(receiptRoute,/Response\.redirect\(new URL\("\/area-riservata\?sessione=scaduta"/);
+  assert.match(receiptRoute,/Location:"\/area-riservata\?sessione=scaduta"/);
   assert.match(styles,/\.private-session-expired/);
 });
