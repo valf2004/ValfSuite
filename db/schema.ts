@@ -6,6 +6,8 @@ export const availabilityRequests = sqliteTable("availability_requests", {
   status: text("status", { enum: ["quote_requested", "quote_sent", "accepted", "checked_in", "police_registered", "archived"] }).notNull().default("quote_requested"),
   paymentStatus: text("payment_status", { enum: ["unpaid", "reported", "partial", "paid"] }).notNull().default("unpaid"),
   archiveOutcome: text("archive_outcome", { enum: ["completed", "cancelled", "unavailable"] }),
+  sourceRequestId: text("source_request_id"),
+  relationReason: text("relation_reason", { enum: ["new_stay", "stay_change"] }),
   name: text("name").notNull(),
   email: text("email").notNull(),
   arrivalDate: text("arrival_date").notNull(),
@@ -28,7 +30,7 @@ export const availabilityRequests = sqliteTable("availability_requests", {
 export const availabilityEvents = sqliteTable("availability_events", {
   id: text("id").primaryKey(),
   requestId: text("request_id").notNull().references(() => availabilityRequests.id, { onDelete: "cascade" }),
-  eventType: text("event_type", { enum: ["request_created", "email_sent", "payment_reported", "payment_confirmed", "balance_requested", "checkin_invited", "checkin_submitted", "status_changed"] }).notNull(),
+  eventType: text("event_type", { enum: ["request_created", "related_request_created", "email_sent", "payment_reported", "payment_confirmed", "balance_requested", "checkin_invited", "checkin_submitted", "status_changed"] }).notNull(),
   fromStatus: text("from_status"),
   toStatus: text("to_status"),
   actorEmail: text("actor_email"),

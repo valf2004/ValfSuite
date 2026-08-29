@@ -34,8 +34,8 @@ export async function createAvailabilityRequest(record: NewAvailabilityRecord) {
   const createdAt = record.createdAt ?? new Date().toISOString();
   const updatedAt = record.updatedAt ?? createdAt;
   await sql`INSERT INTO availability_requests
-    (id,status,archive_outcome,name,email,arrival_date,departure_date,guest_count,message,language,privacy_accepted_at,created_at,updated_at)
-    VALUES (${record.id},${record.status ?? "quote_requested"},${record.archiveOutcome ?? null},${record.name},${record.email},${record.arrivalDate},${record.departureDate},${record.guestCount},${record.message ?? ""},${record.language ?? "it"},${record.privacyAcceptedAt},${createdAt},${updatedAt})`;
+    (id,status,archive_outcome,source_request_id,relation_reason,name,email,arrival_date,departure_date,guest_count,message,language,privacy_accepted_at,created_at,updated_at)
+    VALUES (${record.id},${record.status ?? "quote_requested"},${record.archiveOutcome ?? null},${record.sourceRequestId ?? null},${record.relationReason ?? null},${record.name},${record.email},${record.arrivalDate},${record.departureDate},${record.guestCount},${record.message ?? ""},${record.language ?? "it"},${record.privacyAcceptedAt},${createdAt},${updatedAt})`;
 }
 
 export async function listAvailabilityRequests(status?: AvailabilityStatus) {
@@ -131,6 +131,8 @@ async function initializePostgres(client: Sql) {
     privacy_accepted_at timestamptz NOT NULL,created_at timestamptz NOT NULL DEFAULT now(),updated_at timestamptz NOT NULL DEFAULT now(),CHECK (departure_date > arrival_date))`;
   await client`ALTER TABLE availability_requests ADD COLUMN IF NOT EXISTS archive_outcome text`;
   await client`ALTER TABLE availability_requests ADD COLUMN IF NOT EXISTS payment_status text NOT NULL DEFAULT 'unpaid'`;
+  await client`ALTER TABLE availability_requests ADD COLUMN IF NOT EXISTS source_request_id text`;
+  await client`ALTER TABLE availability_requests ADD COLUMN IF NOT EXISTS relation_reason text`;
   await client`ALTER TABLE availability_requests ADD COLUMN IF NOT EXISTS quote_amount_cents integer`;
   await client`ALTER TABLE availability_requests ADD COLUMN IF NOT EXISTS quote_subject text`;
   await client`ALTER TABLE availability_requests ADD COLUMN IF NOT EXISTS quote_body text`;
@@ -143,6 +145,7 @@ async function initializePostgres(client: Sql) {
   await client`ALTER TABLE availability_requests DROP CONSTRAINT IF EXISTS availability_requests_status_check`;
   await client`ALTER TABLE availability_requests DROP CONSTRAINT IF EXISTS availability_requests_archive_outcome_check`;
   await client`ALTER TABLE availability_requests DROP CONSTRAINT IF EXISTS availability_requests_payment_status_check`;
+  await client`ALTER TABLE availability_requests DROP CONSTRAINT IF EXISTS availability_requests_relation_reason_check`;
   await client`UPDATE availability_requests SET payment_status='reported' WHERE status='payment_reported'`;
   await client`UPDATE availability_requests r SET status=COALESCE((SELECT e.from_status FROM availability_events e WHERE e.request_id=r.id AND e.event_type='payment_reported' AND e.from_status IS NOT NULL AND e.from_status<>'payment_reported' ORDER BY e.created_at DESC LIMIT 1),'quote_sent') WHERE r.status='payment_reported'`;
   await client`UPDATE availability_requests r SET payment_status='paid' WHERE r.payment_status='unpaid' AND r.quote_amount_cents IS NOT NULL AND COALESCE((SELECT SUM(e.amount_cents) FROM availability_events e WHERE e.request_id=r.id AND e.event_type='payment_confirmed'),0)>=r.quote_amount_cents`;
@@ -151,6 +154,7 @@ async function initializePostgres(client: Sql) {
   await client`UPDATE availability_requests SET archive_outcome='unavailable' WHERE status='archived' AND archive_outcome IS NULL`;
   await client`ALTER TABLE availability_requests ADD CONSTRAINT availability_requests_status_check CHECK (status IN ('quote_requested','quote_sent','accepted','checked_in','police_registered','archived'))`;
   await client`ALTER TABLE availability_requests ADD CONSTRAINT availability_requests_payment_status_check CHECK (payment_status IN ('unpaid','reported','partial','paid'))`;
+  await client`ALTER TABLE availability_requests ADD CONSTRAINT availability_requests_relation_reason_check CHECK (relation_reason IS NULL OR relation_reason IN ('new_stay','stay_change'))`;
   await client`ALTER TABLE availability_requests ADD CONSTRAINT availability_requests_archive_outcome_check CHECK (archive_outcome IS NULL OR archive_outcome IN ('completed','cancelled','unavailable'))`;
   await client`CREATE INDEX IF NOT EXISTS idx_availability_events_request_created ON availability_events (request_id,created_at)`;
   await client`CREATE INDEX IF NOT EXISTS idx_availability_quotes_request_active ON availability_quotes (request_id,active)`;
@@ -162,7 +166,7 @@ async function initializePostgres(client: Sql) {
 
 function mapRow(row: Record<string, unknown>): AvailabilityRecord {
   const iso=(value:unknown)=>value instanceof Date?value.toISOString():String(value);
-  return {id:String(row.id),status:String(row.status) as AvailabilityStatus,paymentStatus:String(row.payment_status||"unpaid") as PaymentStatus,archiveOutcome:row.archive_outcome?String(row.archive_outcome) as ArchiveOutcome:null,name:String(row.name),email:String(row.email),arrivalDate:dateValue(row.arrival_date),departureDate:dateValue(row.departure_date),guestCount:Number(row.guest_count),message:String(row.message??""),language:String(row.language),quoteAmountCents:row.quote_amount_cents==null?null:Number(row.quote_amount_cents),quoteSubject:row.quote_subject==null?null:String(row.quote_subject),quoteBody:row.quote_body==null?null:String(row.quote_body),quoteSentAt:row.quote_sent_at==null?null:iso(row.quote_sent_at),privacyAcceptedAt:iso(row.privacy_accepted_at),createdAt:iso(row.created_at),updatedAt:iso(row.updated_at)};
+  return {id:String(row.id),status:String(row.status) as AvailabilityStatus,paymentStatus:String(row.payment_status||"unpaid") as PaymentStatus,archiveOutcome:row.archive_outcome?String(row.archive_outcome) as ArchiveOutcome:null,sourceRequestId:row.source_request_id==null?null:String(row.source_request_id),relationReason:row.relation_reason==null?null:String(row.relation_reason) as "new_stay"|"stay_change",name:String(row.name),email:String(row.email),arrivalDate:dateValue(row.arrival_date),departureDate:dateValue(row.departure_date),guestCount:Number(row.guest_count),message:String(row.message??""),language:String(row.language),quoteAmountCents:row.quote_amount_cents==null?null:Number(row.quote_amount_cents),quoteSubject:row.quote_subject==null?null:String(row.quote_subject),quoteBody:row.quote_body==null?null:String(row.quote_body),quoteSentAt:row.quote_sent_at==null?null:iso(row.quote_sent_at),privacyAcceptedAt:iso(row.privacy_accepted_at),createdAt:iso(row.created_at),updatedAt:iso(row.updated_at)};
 }
 
 async function archiveCompletedStays(){await sql`UPDATE availability_requests SET status='archived',archive_outcome='completed',updated_at=now() WHERE status='police_registered' AND departure_date < CURRENT_DATE`;}

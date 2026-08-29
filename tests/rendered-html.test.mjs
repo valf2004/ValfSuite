@@ -330,7 +330,7 @@ test("returns expired private sessions to the login page", async () => {
     source("app/api/gestione/ricevute/[id]/route.ts"),
     source("app/checkin.css"),
   ]);
-  assert.equal((dashboard.match(/authenticatedFetch\(/g)||[]).length,4);
+  assert.equal((dashboard.match(/authenticatedFetch\(/g)||[]).length,5);
   assert.match(authenticatedFetch,/response\.status !== 401/);
   assert.match(authenticatedFetch,/window\.location\.replace/);
   assert.match(authenticatedFetch,/sessione", "scaduta"/);
@@ -339,4 +339,31 @@ test("returns expired private sessions to the login page", async () => {
   assert.match(privateChrome,/role="alert"/);
   assert.match(receiptRoute,/Location:"\/area-riservata\?sessione=scaduta"/);
   assert.match(styles,/\.private-session-expired/);
+});
+
+
+test("creates linked practices without changing accepted bookings", async () => {
+  const [schema,route,dashboard,postgres,migration] = await Promise.all([
+    source("db/schema.ts"),
+    source("app/api/gestione/richieste/route.ts"),
+    source("app/area-privata/RequestsDashboard.tsx"),
+    source("db/availability.postgres.ts"),
+    source("drizzle/0006_ambiguous_white_queen.sql"),
+  ]);
+  assert.match(schema,/sourceRequestId: text\("source_request_id"\)/);
+  assert.match(schema,/relationReason: text\("relation_reason"/);
+  assert.match(schema,/related_request_created/);
+  assert.match(route,/export async function POST/);
+  assert.match(route,/todayAtProperty\(\)/);
+  assert.match(route,/sourceRequestId:source.id/);
+  assert.match(route,/paymentStatus:"unpaid"/);
+  assert.match(route,/La pratica originale resta invariata/);
+  assert.match(dashboard,/canReviseQuote=.*paymentStatus==="unpaid"/);
+  assert.match(dashboard,/Crea nuova richiesta/);
+  assert.match(dashboard,/Variazione soggiorno/);
+  assert.match(dashboard,/method:"POST"/);
+  assert.match(dashboard,/Crea e prepara preventivo/);
+  assert.match(postgres,/source_request_id,relation_reason/);
+  assert.match(migration,/source_request_id/);
+  assert.match(migration,/relation_reason/);
 });

@@ -43,6 +43,13 @@
       "when": 1786816856422,
       "tag": "0005_fantastic_zodiak",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "6",
+      "when": 1788018377303,
+      "tag": "0006_ambiguous_white_queen",
+      "breakpoints": true
     }
   ]
 }
