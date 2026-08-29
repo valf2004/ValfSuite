@@ -369,7 +369,7 @@ test("creates linked practices without changing accepted bookings", async () => 
 });
 
 
-test("defaults the requested payment by arrival date and keeps it editable", async () => {
+test("configures deposit and balance percentages and persists the calculated payment", async () => {
   const [dashboard,route,schema,repository,postgresRepository,paymentPage,paymentForm,balanceRoute,migration] = await Promise.all([
     source("app/area-privata/RequestsDashboard.tsx"),
     source("app/api/gestione/preventivo/route.ts"),
@@ -379,26 +379,49 @@ test("defaults the requested payment by arrival date and keeps it editable", asy
     source("app/pagamento/[token]/page.tsx"),
     source("app/pagamento/[token]/PaymentForm.tsx"),
     source("app/api/gestione/saldo/route.ts"),
-    source("drizzle/0007_happy_frightful_four.sql"),
+    source("drizzle/0008_previous_lester.sql"),
   ]);
   assert.match(dashboard,/Importo richiesto ora/);
   assert.match(dashboard,/isShortNotice\(item\.arrivalDate,today\)/);
-  assert.match(dashboard,/7 giorni all’arrivo/);
-  assert.match(dashboard,/defaultRequestedPayment/);
-  assert.match(dashboard,/requestedPayment:e\.target\.value/);
+  assert.match(dashboard,/entro 7 giorni/);
+  assert.match(dashboard,/depositPercent/);
+  assert.match(dashboard,/balancePercent/);
+  assert.match(dashboard,/paymentFromPercentage/);
   assert.match(dashboard,/CONDIZIONI_PAGAMENTO/);
-  assert.match(route,/requestedPaymentCents>quoteAmountCents/);
+  assert.match(route,/data\.depositPercent \+ data\.balancePercent !== 100/);
   assert.match(route,/requestedPaymentCents===quoteAmountCents/);
+  assert.match(route,/quoteAmountCents \* depositPercent \/ 100/);
   assert.match(route,/pagamento dell’intero importo/);
-  assert.match(route,/requestedPaymentCents,subject/);
+  assert.match(route,/requestedPaymentCents,depositPercent,balancePercent,subject/);
   assert.match(schema,/quoteRequestedPaymentCents: integer\("quote_requested_payment_cents"\)/);
   assert.match(schema,/requestedPaymentCents: integer\("requested_payment_cents"\)/);
+  assert.match(schema,/quoteDepositPercent: integer\("quote_deposit_percent"\)/);
+  assert.match(schema,/depositPercent: integer\("deposit_percent"\)/);
   assert.match(repository,/requestedPaymentCents:quote\.requestedPaymentCents/);
   assert.match(postgresRepository,/requested_payment_cents/);
   assert.match(paymentPage,/requestedPaymentCents=\{quote\.requestedPaymentCents\}/);
   assert.match(paymentForm,/initialRequestedCents/);
   assert.match(paymentForm,/Importo richiesto/);
   assert.match(balanceRoute,/quoteRequestedPaymentCents/);
-  assert.match(migration,/requested_payment_cents/);
-  assert.match(migration,/quote_requested_payment_cents/);
+  assert.match(migration,/deposit_percent/);
+  assert.match(migration,/balance_percent/);
+  assert.match(migration,/quote_deposit_percent/);
+  assert.match(migration,/quote_balance_percent/);
+});
+
+
+test("operators can complete check-in from the private dashboard", async () => {
+  const [dashboard,operatorRoute,operatorPage,guestForm,repository]=await Promise.all([
+    source("app/area-privata/RequestsDashboard.tsx"),
+    source("app/api/gestione/checkin/[id]/route.ts"),
+    source("app/area-riservata/checkin/[id]/page.tsx"),
+    source("app/checkin/GuestCheckin.tsx"),
+    source("db/availability.ts"),
+  ]);
+  assert.match(dashboard,/Compila check-in/);
+  assert.match(operatorRoute,/privateUserFromCookie/);
+  assert.match(operatorRoute,/prepareCheckinSubmission/);
+  assert.match(operatorPage,/operatorMode/);
+  assert.match(guestForm,/Registra check-in/);
+  assert.match(repository,/Check-in compilato dall’operatore/);
 });

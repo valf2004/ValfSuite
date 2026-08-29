@@ -133,6 +133,7 @@
 .request-actions .confirmation-action { border-color:#276555; background:#276555; }
 .request-actions .balance-action { border-color:#a35c17; background:#a35c17; }
 .request-actions .checkin-invite-action { border-color:#276555; color:#276555; background:#eef7f4; }
+.request-actions .operator-checkin-action { border-color:#276555; background:#276555; color:white; }
 .request-actions .related-request-action { border-color:var(--sea); color:var(--sea-dark); background:#f4faf8; }.request-actions .stay-change-action { border-color:#9b7656; color:#725238; background:#fbf6f0; }
 .balance-alert { display:flex; align-items:center; justify-content:space-between; gap:16px; margin:11px 0 0 38px; padding:9px 12px; border-left:4px solid #d39a28; background:#fff4d5; color:#745411; font-size:11px; }.balance-alert strong { font-size:12px; }.balance-alert.overdue { border-left-color:#b84735; background:#f9dfda; color:#7f3025; }.balance-alert.paid { border-left-color:#347966; background:#deeee8; color:#285d50; }
 .status-control { margin:0 0 0 auto; display:flex; align-items:center; gap:8px; color:var(--taupe); font-size:10px; text-transform:uppercase; letter-spacing:.08em; }.status-control select { min-height:34px; margin:0; padding:6px 30px 6px 10px; border:1px solid var(--line); background:white; color:var(--brown); font:600 11px 'DM Sans',sans-serif; text-transform:none; letter-spacing:0; }
