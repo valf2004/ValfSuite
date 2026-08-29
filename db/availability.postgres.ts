@@ -12,9 +12,9 @@ type NewAvailabilityEvent = Pick<AvailabilityEvent,"requestId"|"eventType"|"crea
 
 export type PublicQuote = {
   quoteId:string; requestId:string; name:string; email:string; arrivalDate:string; departureDate:string;
-  guestCount:number; language:string; amountCents:number; confirmedAmountCents:number; status:AvailabilityStatus;
+  guestCount:number; language:string; amountCents:number; requestedPaymentCents:number; confirmedAmountCents:number; status:AvailabilityStatus;
 };
-export type SentQuote = { id:string; requestId:string; amountCents:number; subject:string; body:string; tokenHash:string; actorEmail?:string };
+export type SentQuote = { id:string; requestId:string; amountCents:number; requestedPaymentCents:number; subject:string; body:string; tokenHash:string; actorEmail?:string };
 export type PaymentConfirmationInput = { requestId:string; amountCents:number; subject:string; body:string; actorEmail:string; fullyPaid:boolean; nextPaymentTokenHash?:string|null; targetStatus?:"accepted"|"checked_in"|"police_registered" };
 export type GuestCommunicationInput = { requestId:string; eventType:"balance_requested"|"checkin_invited"; subject:string; body:string; note:string; actorEmail:string; paymentTokenHash?:string|null };
 export type PaymentSubmissionInput = {
@@ -58,8 +58,8 @@ export async function recordSentQuote(quote:SentQuote) {
   await ready();
   const createdAt = new Date().toISOString();
   await sql`UPDATE availability_quotes SET active=false WHERE request_id=${quote.requestId}`;
-  await sql`INSERT INTO availability_quotes (id,request_id,amount_cents,subject,body,token_hash,active,created_at) VALUES (${quote.id},${quote.requestId},${quote.amountCents},${quote.subject},${quote.body},${quote.tokenHash},true,${createdAt})`;
-  const rows = await sql`UPDATE availability_requests SET status='quote_sent',archive_outcome=NULL,quote_amount_cents=${quote.amountCents},quote_subject=${quote.subject},quote_body=${quote.body},quote_sent_at=${createdAt},updated_at=${createdAt} WHERE id=${quote.requestId} RETURNING *`;
+  await sql`INSERT INTO availability_quotes (id,request_id,amount_cents,requested_payment_cents,subject,body,token_hash,active,created_at) VALUES (${quote.id},${quote.requestId},${quote.amountCents},${quote.requestedPaymentCents},${quote.subject},${quote.body},${quote.tokenHash},true,${createdAt})`;
+  const rows = await sql`UPDATE availability_requests SET status='quote_sent',archive_outcome=NULL,quote_amount_cents=${quote.amountCents},quote_requested_payment_cents=${quote.requestedPaymentCents},quote_subject=${quote.subject},quote_body=${quote.body},quote_sent_at=${createdAt},updated_at=${createdAt} WHERE id=${quote.requestId} RETURNING *`;
   if(rows.length) await insertEvent({requestId:quote.requestId,eventType:"email_sent",toStatus:"quote_sent",actorEmail:quote.actorEmail??null,note:"Preventivo inviato al cliente",subject:quote.subject,body:quote.body,amountCents:quote.amountCents,createdAt});
   return rows.map(mapRow);
 }
@@ -96,10 +96,10 @@ export async function recordCheckinSubmission(requestId:string,body:string) {
 
 export async function findActiveQuoteByTokenHash(tokenHash:string):Promise<PublicQuote|null> {
   await ready();
-  const rows=await sql`SELECT q.id AS quote_id,q.request_id,q.amount_cents,r.name,r.email,r.arrival_date,r.departure_date,r.guest_count,r.language,r.status,COALESCE((SELECT SUM(e.amount_cents) FROM availability_events e WHERE e.request_id=q.request_id AND e.event_type='payment_confirmed'),0) AS confirmed_amount_cents FROM availability_quotes q JOIN availability_requests r ON r.id=q.request_id WHERE q.token_hash=${tokenHash} AND q.active=true LIMIT 1`;
+  const rows=await sql`SELECT q.id AS quote_id,q.request_id,q.amount_cents,q.requested_payment_cents,r.name,r.email,r.arrival_date,r.departure_date,r.guest_count,r.language,r.status,COALESCE((SELECT SUM(e.amount_cents) FROM availability_events e WHERE e.request_id=q.request_id AND e.event_type='payment_confirmed'),0) AS confirmed_amount_cents FROM availability_quotes q JOIN availability_requests r ON r.id=q.request_id WHERE q.token_hash=${tokenHash} AND q.active=true LIMIT 1`;
   if(!rows.length)return null;
   const row=rows[0];
-  return {quoteId:String(row.quote_id),requestId:String(row.request_id),name:String(row.name),email:String(row.email),arrivalDate:dateValue(row.arrival_date),departureDate:dateValue(row.departure_date),guestCount:Number(row.guest_count),language:String(row.language),amountCents:Number(row.amount_cents),confirmedAmountCents:Number(row.confirmed_amount_cents),status:String(row.status) as AvailabilityStatus};
+  return {quoteId:String(row.quote_id),requestId:String(row.request_id),name:String(row.name),email:String(row.email),arrivalDate:dateValue(row.arrival_date),departureDate:dateValue(row.departure_date),guestCount:Number(row.guest_count),language:String(row.language),amountCents:Number(row.amount_cents),requestedPaymentCents:row.requested_payment_cents==null?Math.round(Number(row.amount_cents)*.3):Number(row.requested_payment_cents),confirmedAmountCents:Number(row.confirmed_amount_cents),status:String(row.status) as AvailabilityStatus};
 }
 
 export async function createPaymentSubmission(input:PaymentSubmissionInput) {
@@ -134,13 +134,15 @@ async function initializePostgres(client: Sql) {
   await client`ALTER TABLE availability_requests ADD COLUMN IF NOT EXISTS source_request_id text`;
   await client`ALTER TABLE availability_requests ADD COLUMN IF NOT EXISTS relation_reason text`;
   await client`ALTER TABLE availability_requests ADD COLUMN IF NOT EXISTS quote_amount_cents integer`;
+  await client`ALTER TABLE availability_requests ADD COLUMN IF NOT EXISTS quote_requested_payment_cents integer`;
   await client`ALTER TABLE availability_requests ADD COLUMN IF NOT EXISTS quote_subject text`;
   await client`ALTER TABLE availability_requests ADD COLUMN IF NOT EXISTS quote_body text`;
   await client`ALTER TABLE availability_requests ADD COLUMN IF NOT EXISTS quote_sent_at timestamptz`;
   await client`CREATE TABLE IF NOT EXISTS availability_events (id text PRIMARY KEY,request_id text NOT NULL REFERENCES availability_requests(id) ON DELETE CASCADE,event_type text NOT NULL,from_status text,to_status text,actor_email text,note text,subject text,body text,amount_cents integer,attachment_id text,attachment_name text,created_at timestamptz NOT NULL DEFAULT now())`;
   await client`ALTER TABLE availability_events ADD COLUMN IF NOT EXISTS attachment_id text`;
   await client`ALTER TABLE availability_events ADD COLUMN IF NOT EXISTS attachment_name text`;
-  await client`CREATE TABLE IF NOT EXISTS availability_quotes (id text PRIMARY KEY,request_id text NOT NULL REFERENCES availability_requests(id) ON DELETE CASCADE,amount_cents integer NOT NULL,subject text NOT NULL,body text NOT NULL,token_hash text NOT NULL UNIQUE,active boolean NOT NULL DEFAULT true,created_at timestamptz NOT NULL DEFAULT now())`;
+  await client`CREATE TABLE IF NOT EXISTS availability_quotes (id text PRIMARY KEY,request_id text NOT NULL REFERENCES availability_requests(id) ON DELETE CASCADE,amount_cents integer NOT NULL,requested_payment_cents integer,subject text NOT NULL,body text NOT NULL,token_hash text NOT NULL UNIQUE,active boolean NOT NULL DEFAULT true,created_at timestamptz NOT NULL DEFAULT now())`;
+  await client`ALTER TABLE availability_quotes ADD COLUMN IF NOT EXISTS requested_payment_cents integer`;
   await client`CREATE TABLE IF NOT EXISTS payment_submissions (id text PRIMARY KEY,quote_id text NOT NULL REFERENCES availability_quotes(id) ON DELETE CASCADE,request_id text NOT NULL REFERENCES availability_requests(id) ON DELETE CASCADE,method text NOT NULL CHECK (method IN ('bank_transfer','paypal')),paid_amount_cents integer NOT NULL,paid_at date NOT NULL,payment_reference text NOT NULL DEFAULT '',message text NOT NULL DEFAULT '',receipt_key text,receipt_name text,receipt_content_type text,receipt_size integer,created_at timestamptz NOT NULL DEFAULT now())`;
   await client`ALTER TABLE availability_requests DROP CONSTRAINT IF EXISTS availability_requests_status_check`;
   await client`ALTER TABLE availability_requests DROP CONSTRAINT IF EXISTS availability_requests_archive_outcome_check`;
@@ -166,7 +168,7 @@ async function initializePostgres(client: Sql) {
 
 function mapRow(row: Record<string, unknown>): AvailabilityRecord {
   const iso=(value:unknown)=>value instanceof Date?value.toISOString():String(value);
-  return {id:String(row.id),status:String(row.status) as AvailabilityStatus,paymentStatus:String(row.payment_status||"unpaid") as PaymentStatus,archiveOutcome:row.archive_outcome?String(row.archive_outcome) as ArchiveOutcome:null,sourceRequestId:row.source_request_id==null?null:String(row.source_request_id),relationReason:row.relation_reason==null?null:String(row.relation_reason) as "new_stay"|"stay_change",name:String(row.name),email:String(row.email),arrivalDate:dateValue(row.arrival_date),departureDate:dateValue(row.departure_date),guestCount:Number(row.guest_count),message:String(row.message??""),language:String(row.language),quoteAmountCents:row.quote_amount_cents==null?null:Number(row.quote_amount_cents),quoteSubject:row.quote_subject==null?null:String(row.quote_subject),quoteBody:row.quote_body==null?null:String(row.quote_body),quoteSentAt:row.quote_sent_at==null?null:iso(row.quote_sent_at),privacyAcceptedAt:iso(row.privacy_accepted_at),createdAt:iso(row.created_at),updatedAt:iso(row.updated_at)};
+  return {id:String(row.id),status:String(row.status) as AvailabilityStatus,paymentStatus:String(row.payment_status||"unpaid") as PaymentStatus,archiveOutcome:row.archive_outcome?String(row.archive_outcome) as ArchiveOutcome:null,sourceRequestId:row.source_request_id==null?null:String(row.source_request_id),relationReason:row.relation_reason==null?null:String(row.relation_reason) as "new_stay"|"stay_change",name:String(row.name),email:String(row.email),arrivalDate:dateValue(row.arrival_date),departureDate:dateValue(row.departure_date),guestCount:Number(row.guest_count),message:String(row.message??""),language:String(row.language),quoteAmountCents:row.quote_amount_cents==null?null:Number(row.quote_amount_cents),quoteRequestedPaymentCents:row.quote_requested_payment_cents==null?null:Number(row.quote_requested_payment_cents),quoteSubject:row.quote_subject==null?null:String(row.quote_subject),quoteBody:row.quote_body==null?null:String(row.quote_body),quoteSentAt:row.quote_sent_at==null?null:iso(row.quote_sent_at),privacyAcceptedAt:iso(row.privacy_accepted_at),createdAt:iso(row.created_at),updatedAt:iso(row.updated_at)};
 }
 
 async function archiveCompletedStays(){await sql`UPDATE availability_requests SET status='archived',archive_outcome='completed',updated_at=now() WHERE status='police_registered' AND departure_date < CURRENT_DATE`;}

@@ -18,7 +18,7 @@ export async function POST(request:Request){
     if(item.status!=="accepted"||item.quoteAmountCents==null)return Response.json({message:"Il saldo può essere richiesto soltanto per una prenotazione accettata."},{status:409});
     const events=await listAvailabilityEvents();
     const confirmed=events.filter(event=>event.requestId===item.id&&event.eventType==="payment_confirmed").reduce((total,event)=>total+(event.amountCents||0),0);
-    const recordedOrExpectedDeposit=confirmed>0?confirmed:Math.round(item.quoteAmountCents*.3);
+    const recordedOrExpectedDeposit=confirmed>0?confirmed:(item.quoteRequestedPaymentCents??Math.round(item.quoteAmountCents*.3));
     const balance=Math.max(0,item.quoteAmountCents-recordedOrExpectedDeposit);
     if(balance<=0)return Response.json({message:"La prenotazione risulta già saldata."},{status:409});
     const token=createPaymentToken();const tokenHash=await hashPaymentToken(token);const paymentUrl=`${publicBaseUrl(request,requestHeaders)}/pagamento/${token}?saldo=1`;

@@ -9,8 +9,8 @@ export type AvailabilityRecord = typeof availabilityRequests.$inferSelect;
 export type NewAvailabilityRecord = typeof availabilityRequests.$inferInsert;
 export type AvailabilityEvent = typeof availabilityEvents.$inferSelect;
 type NewAvailabilityEvent = Pick<AvailabilityEvent,"requestId"|"eventType"|"createdAt"> & Partial<Omit<AvailabilityEvent,"id"|"requestId"|"eventType"|"createdAt">> & { id?:string };
-export type PublicQuote = { quoteId:string; requestId:string; name:string; email:string; arrivalDate:string; departureDate:string; guestCount:number; language:string; amountCents:number; confirmedAmountCents:number; status:AvailabilityStatus };
-export type SentQuote = { id:string; requestId:string; amountCents:number; subject:string; body:string; tokenHash:string; actorEmail?:string };
+export type PublicQuote = { quoteId:string; requestId:string; name:string; email:string; arrivalDate:string; departureDate:string; guestCount:number; language:string; amountCents:number; requestedPaymentCents:number; confirmedAmountCents:number; status:AvailabilityStatus };
+export type SentQuote = { id:string; requestId:string; amountCents:number; requestedPaymentCents:number; subject:string; body:string; tokenHash:string; actorEmail?:string };
 export type PaymentConfirmationInput = { requestId:string; amountCents:number; subject:string; body:string; actorEmail:string; fullyPaid:boolean; nextPaymentTokenHash?:string|null; targetStatus?:"accepted"|"checked_in"|"police_registered" };
 export type GuestCommunicationInput = { requestId:string; eventType:"balance_requested"|"checkin_invited"; subject:string; body:string; note:string; actorEmail:string; paymentTokenHash?:string|null };
 export type PaymentSubmissionInput = { id:string; quoteId:string; requestId:string; method:PaymentMethod; paidAmountCents:number; paidAt:string; paymentReference:string; message:string; receiptKey:string|null; receiptName:string|null; receiptContentType:string|null; receiptSize:number|null; createdAt:string };
@@ -43,8 +43,8 @@ export async function recordSentQuote(quote:SentQuote){
   if(usesPostgres())return (await postgresRepository()).recordSentQuote(quote);
   const {getDb}=await import(".");const db=getDb();const createdAt=new Date().toISOString();
   await db.update(availabilityQuotes).set({active:false}).where(eq(availabilityQuotes.requestId,quote.requestId));
-  await db.insert(availabilityQuotes).values({id:quote.id,requestId:quote.requestId,amountCents:quote.amountCents,subject:quote.subject,body:quote.body,tokenHash:quote.tokenHash,active:true,createdAt});
-  const updated=await db.update(availabilityRequests).set({status:"quote_sent",archiveOutcome:null,quoteAmountCents:quote.amountCents,quoteSubject:quote.subject,quoteBody:quote.body,quoteSentAt:createdAt,updatedAt:createdAt}).where(eq(availabilityRequests.id,quote.requestId)).returning();
+  await db.insert(availabilityQuotes).values({id:quote.id,requestId:quote.requestId,amountCents:quote.amountCents,requestedPaymentCents:quote.requestedPaymentCents,subject:quote.subject,body:quote.body,tokenHash:quote.tokenHash,active:true,createdAt});
+  const updated=await db.update(availabilityRequests).set({status:"quote_sent",archiveOutcome:null,quoteAmountCents:quote.amountCents,quoteRequestedPaymentCents:quote.requestedPaymentCents,quoteSubject:quote.subject,quoteBody:quote.body,quoteSentAt:createdAt,updatedAt:createdAt}).where(eq(availabilityRequests.id,quote.requestId)).returning();
   if(updated.length)await recordAvailabilityEvent({requestId:quote.requestId,eventType:"email_sent",toStatus:"quote_sent",actorEmail:quote.actorEmail??null,note:"Preventivo inviato al cliente",subject:quote.subject,body:quote.body,amountCents:quote.amountCents,createdAt});
   return updated;
 }
@@ -79,9 +79,9 @@ export async function recordCheckinSubmission(requestId:string,body:string){
 
 export async function findActiveQuoteByTokenHash(tokenHash:string):Promise<PublicQuote|null>{
   if(usesPostgres())return (await postgresRepository()).findActiveQuoteByTokenHash(tokenHash);
-  const {getDb}=await import(".");const db=getDb();const rows=await db.select({quoteId:availabilityQuotes.id,requestId:availabilityQuotes.requestId,amountCents:availabilityQuotes.amountCents,name:availabilityRequests.name,email:availabilityRequests.email,arrivalDate:availabilityRequests.arrivalDate,departureDate:availabilityRequests.departureDate,guestCount:availabilityRequests.guestCount,language:availabilityRequests.language,status:availabilityRequests.status}).from(availabilityQuotes).innerJoin(availabilityRequests,eq(availabilityQuotes.requestId,availabilityRequests.id)).where(and(eq(availabilityQuotes.tokenHash,tokenHash),eq(availabilityQuotes.active,true))).limit(1);
-  if(!rows[0])return null;const confirmed=await db.select({amountCents:availabilityEvents.amountCents}).from(availabilityEvents).where(and(eq(availabilityEvents.requestId,rows[0].requestId),eq(availabilityEvents.eventType,"payment_confirmed")));
-  return {...rows[0],confirmedAmountCents:confirmed.reduce((total,event)=>total+(event.amountCents||0),0)};
+  const {getDb}=await import(".");const db=getDb();const rows=await db.select({quoteId:availabilityQuotes.id,requestId:availabilityQuotes.requestId,amountCents:availabilityQuotes.amountCents,requestedPaymentCents:availabilityQuotes.requestedPaymentCents,name:availabilityRequests.name,email:availabilityRequests.email,arrivalDate:availabilityRequests.arrivalDate,departureDate:availabilityRequests.departureDate,guestCount:availabilityRequests.guestCount,language:availabilityRequests.language,status:availabilityRequests.status}).from(availabilityQuotes).innerJoin(availabilityRequests,eq(availabilityQuotes.requestId,availabilityRequests.id)).where(and(eq(availabilityQuotes.tokenHash,tokenHash),eq(availabilityQuotes.active,true))).limit(1);
+  if(!rows[0])return null;const row=rows[0];const confirmed=await db.select({amountCents:availabilityEvents.amountCents}).from(availabilityEvents).where(and(eq(availabilityEvents.requestId,rows[0].requestId),eq(availabilityEvents.eventType,"payment_confirmed")));
+  return {...row,requestedPaymentCents:row.requestedPaymentCents??Math.round(row.amountCents*.3),confirmedAmountCents:confirmed.reduce((total,event)=>total+(event.amountCents||0),0)};
 }
 
 export async function createPaymentSubmission(input:PaymentSubmissionInput){

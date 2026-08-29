@@ -242,7 +242,7 @@ test("confirms verified payments and tracks the remaining balance", async () => 
   assert.match(paymentRoute,/"accepted"/);
   assert.match(paymentForm,/remainingCents=Math\.max\(0,totalCents-confirmedCents\)/);
   assert.match(paymentForm,/balanceRequested\?balanceCents/);
-  assert.match(paymentForm,/totalCents-\(confirmedCents>0\?confirmedCents:depositCents\)/);
+  assert.match(paymentForm,/totalCents-\(confirmedCents>0\?confirmedCents:initialRequestedCents\)/);
   assert.match(paymentForm,/Saldo residuo/);
 });
 
@@ -366,4 +366,39 @@ test("creates linked practices without changing accepted bookings", async () => 
   assert.match(postgres,/source_request_id,relation_reason/);
   assert.match(migration,/source_request_id/);
   assert.match(migration,/relation_reason/);
+});
+
+
+test("defaults the requested payment by arrival date and keeps it editable", async () => {
+  const [dashboard,route,schema,repository,postgresRepository,paymentPage,paymentForm,balanceRoute,migration] = await Promise.all([
+    source("app/area-privata/RequestsDashboard.tsx"),
+    source("app/api/gestione/preventivo/route.ts"),
+    source("db/schema.ts"),
+    source("db/availability.ts"),
+    source("db/availability.postgres.ts"),
+    source("app/pagamento/[token]/page.tsx"),
+    source("app/pagamento/[token]/PaymentForm.tsx"),
+    source("app/api/gestione/saldo/route.ts"),
+    source("drizzle/0007_happy_frightful_four.sql"),
+  ]);
+  assert.match(dashboard,/Importo richiesto ora/);
+  assert.match(dashboard,/isShortNotice\(item\.arrivalDate,today\)/);
+  assert.match(dashboard,/7 giorni all’arrivo/);
+  assert.match(dashboard,/defaultRequestedPayment/);
+  assert.match(dashboard,/requestedPayment:e\.target\.value/);
+  assert.match(dashboard,/CONDIZIONI_PAGAMENTO/);
+  assert.match(route,/requestedPaymentCents>quoteAmountCents/);
+  assert.match(route,/requestedPaymentCents===quoteAmountCents/);
+  assert.match(route,/pagamento dell’intero importo/);
+  assert.match(route,/requestedPaymentCents,subject/);
+  assert.match(schema,/quoteRequestedPaymentCents: integer\("quote_requested_payment_cents"\)/);
+  assert.match(schema,/requestedPaymentCents: integer\("requested_payment_cents"\)/);
+  assert.match(repository,/requestedPaymentCents:quote\.requestedPaymentCents/);
+  assert.match(postgresRepository,/requested_payment_cents/);
+  assert.match(paymentPage,/requestedPaymentCents=\{quote\.requestedPaymentCents\}/);
+  assert.match(paymentForm,/initialRequestedCents/);
+  assert.match(paymentForm,/Importo richiesto/);
+  assert.match(balanceRoute,/quoteRequestedPaymentCents/);
+  assert.match(migration,/requested_payment_cents/);
+  assert.match(migration,/quote_requested_payment_cents/);
 });
