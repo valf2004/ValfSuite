@@ -410,6 +410,26 @@ test("configures deposit and balance percentages and persists the calculated pay
 });
 
 
+test("protects and manages Alloggiati Web settings from the private area", async () => {
+  const [chrome,page,form,route,settings,schema,repository,postgres,compose,example] = await Promise.all([
+    source("app/area-privata/PrivateChrome.tsx"),source("app/area-riservata/impostazioni/page.tsx"),source("app/area-privata/AlloggiatiSettingsForm.tsx"),source("app/api/gestione/impostazioni/alloggiati/route.ts"),source("app/lib/alloggiati-settings.ts"),source("db/schema.ts"),source("db/settings.ts"),source("db/availability.postgres.ts"),source("docker-compose.yml"),source(".env.example"),
+  ]);
+  assert.ok(chrome.indexOf("settings-link") < chrome.indexOf('href="/api/auth/logout"'));
+  assert.match(chrome,/area-riservata\/impostazioni/);
+  assert.match(page,/privateUserFromCookie/);
+  assert.match(page,/robots: \{ index: false, follow: false \}/);
+  assert.match(form,/Salva impostazioni/);
+  assert.match(form,/name="wsKey" type="password"/);
+  assert.match(route,/privateUserFromCookie/);
+  assert.match(settings,/AES-GCM/);
+  assert.match(settings,/AUTH_SESSION_SECRET/);
+  assert.doesNotMatch(settings,/return .*password/);
+  assert.match(schema,/application_settings/);
+  assert.match(repository,/onConflictDoUpdate/);
+  assert.match(postgres,/CREATE TABLE IF NOT EXISTS application_settings/);
+  for(const key of ["ALLOGGIATI_USER","ALLOGGIATI_PASSWORD","ALLOGGIATI_WSKEY","ALLOGGIATI_ACCOUNT_MODE","ALLOGGIATI_APARTMENT_ID"]){assert.match(compose,new RegExp(key));assert.match(example,new RegExp(key));}
+});
+
 test("operators can complete check-in from the private dashboard", async () => {
   const [dashboard,operatorRoute,operatorPage,guestForm,repository]=await Promise.all([
     source("app/area-privata/RequestsDashboard.tsx"),

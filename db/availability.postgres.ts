@@ -120,10 +120,14 @@ export async function getPaymentReceipt(id:string) {
   return {key:String(rows[0].receipt_key),name:String(rows[0].receipt_name||"ricevuta"),contentType:String(rows[0].receipt_content_type||"application/octet-stream"),size:rows[0].receipt_size==null?null:Number(rows[0].receipt_size)};
 }
 
+export async function getStoredSettings(keys:string[]){await ready();const wanted=new Set(keys);const rows=await sql`SELECT key,encrypted_value,updated_at,updated_by FROM application_settings`;return rows.filter(row=>wanted.has(String(row.key))).map(row=>({key:String(row.key),encryptedValue:String(row.encrypted_value),updatedAt:row.updated_at instanceof Date?row.updated_at.toISOString():String(row.updated_at),updatedBy:String(row.updated_by)}));}
+export async function saveStoredSettings(settings:Array<{key:string;encryptedValue:string;updatedAt:string;updatedBy:string}>){await ready();for(const item of settings)await sql`INSERT INTO application_settings (key,encrypted_value,updated_at,updated_by) VALUES (${item.key},${item.encryptedValue},${item.updatedAt},${item.updatedBy}) ON CONFLICT (key) DO UPDATE SET encrypted_value=EXCLUDED.encrypted_value,updated_at=EXCLUDED.updated_at,updated_by=EXCLUDED.updated_by`;}
+
 export async function recordAvailabilityEvent(event:NewAvailabilityEvent){await ready();await insertEvent(event);return event;}
 export async function listAvailabilityEvents(){await ready();const rows=await sql`SELECT * FROM availability_events ORDER BY created_at ASC`;return rows.map(mapEventRow);}
 
 async function initializePostgres(client: Sql) {
+  await client`CREATE TABLE IF NOT EXISTS application_settings (key text PRIMARY KEY,encrypted_value text NOT NULL,updated_at timestamptz NOT NULL DEFAULT now(),updated_by text NOT NULL)`;
   await client`CREATE TABLE IF NOT EXISTS availability_requests (
     id text PRIMARY KEY,status text NOT NULL DEFAULT 'quote_requested',archive_outcome text,
     name text NOT NULL,email text NOT NULL,arrival_date date NOT NULL,departure_date date NOT NULL,

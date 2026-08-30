@@ -1,6 +1,13 @@
 import { sql } from "drizzle-orm";
 import { integer, sqliteTable, text, index, uniqueIndex } from "drizzle-orm/sqlite-core";
 
+export const applicationSettings = sqliteTable("application_settings", {
+  key: text("key").primaryKey(),
+  encryptedValue: text("encrypted_value").notNull(),
+  updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+  updatedBy: text("updated_by").notNull(),
+});
+
 export const availabilityRequests = sqliteTable("availability_requests", {
   id: text("id").primaryKey(),
   status: text("status", { enum: ["quote_requested", "quote_sent", "accepted", "checked_in", "police_registered", "archived"] }).notNull().default("quote_requested"),
