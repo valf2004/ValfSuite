@@ -120,8 +120,11 @@
 .settings-source { flex:0 0 auto; padding:7px 11px; border-radius:99px; border:1px solid var(--line); background:white; color:#76685d; font-size:11px; font-weight:800; }
 .settings-source.file { color:#23624e; background:#eaf5ef; border-color:#bfdfd1; }
 .settings-form { padding:20px; border:1px solid var(--line); border-radius:18px; background:white; box-shadow:0 12px 32px rgba(60,46,34,.06); }
-.settings-security-note { display:flex; gap:12px; align-items:flex-start; margin-bottom:18px; padding:12px 14px; border-radius:12px; background:#f2f7f4; color:#365b4d; font-size:12px; }
+.settings-security-note { display:flex; gap:16px; align-items:center; justify-content:space-between; margin-bottom:18px; padding:12px 14px; border-radius:12px; background:#f2f7f4; color:#365b4d; font-size:12px; }
+.settings-security-note > div { display:grid; gap:2px; }
 .settings-security-note span { color:#5d7069; }
+.settings-security-note button { flex:0 0 auto; min-height:36px; padding:8px 14px; border:1px solid #9bc7b5; border-radius:99px; background:white; color:#23624e; font-weight:800; cursor:pointer; }
+.settings-security-note button:disabled { opacity:.55; cursor:wait; }
 .settings-grid { display:grid; grid-template-columns:1fr 1fr; gap:16px; }
 .settings-grid label { display:flex; flex-direction:column; gap:6px; color:#554940; font-size:12px; font-weight:800; }
 .settings-grid input,.settings-grid select,.settings-grid textarea { width:100%; min-height:42px; padding:9px 11px; border:1px solid #d8cec4; border-radius:10px; background:#fff; color:#302a25; font:inherit; font-weight:500; }

@@ -1,5 +1,6 @@
 import { and, asc, desc, eq } from "drizzle-orm";
-import { availabilityEvents, availabilityQuotes, availabilityRequests, paymentSubmissions } from "./schema";
+import { availabilityEvents, availabilityQuotes, availabilityRequests, checkinGuests, checkinPractices, paymentSubmissions } from "./schema";
+import type { CheckinSubmissionRecord } from "../app/lib/checkin-submission";
 
 export type AvailabilityStatus = "quote_requested" | "quote_sent" | "accepted" | "checked_in" | "police_registered" | "archived";
 export type PaymentStatus = "unpaid" | "reported" | "partial" | "paid";
@@ -69,12 +70,23 @@ export async function recordGuestCommunication(input:GuestCommunicationInput){
   return updated;
 }
 
-export async function recordCheckinSubmission(requestId:string,body:string,actorEmail?:string){
-  if(usesPostgres())return (await postgresRepository()).recordCheckinSubmission(requestId,body,actorEmail);
-  const {getDb}=await import(".");const db=getDb();const current=await db.select().from(availabilityRequests).where(eq(availabilityRequests.id,requestId));const createdAt=new Date().toISOString();
+export async function recordCheckinSubmission(requestId:string,submission:CheckinSubmissionRecord,actorEmail?:string){
+  if(usesPostgres())return (await postgresRepository()).recordCheckinSubmission(requestId,submission,actorEmail);
+  const {getDb}=await import(".");const db=getDb();const current=await db.select().from(availabilityRequests).where(eq(availabilityRequests.id,requestId));const existing=await db.select().from(checkinPractices).where(eq(checkinPractices.requestId,requestId));const createdAt=new Date().toISOString();
+  const practice={requestId,state:"ready" as const,language:submission.language,guestCount:submission.guestCount,groupType:submission.groupType,arrivalTime:submission.arrivalTime,transport:submission.transport,arrivalNotes:submission.arrivalNotes,privacyAcceptedAt:submission.privacyAcceptedAt,source:actorEmail?"operator" as const:"guest" as const,version:(existing[0]?.version||0)+1,lastError:null,updatedAt:createdAt};
+  await db.insert(checkinPractices).values({...practice,createdAt:existing[0]?.createdAt||createdAt}).onConflictDoUpdate({target:checkinPractices.requestId,set:practice});
+  await db.delete(checkinGuests).where(eq(checkinGuests.requestId,requestId));
+  if(submission.guests.length)await db.insert(checkinGuests).values(submission.guests.map(guest=>({id:`${requestId}:${guest.ordinal}`,requestId,...guest})));
   const updated=await db.update(availabilityRequests).set({status:"checked_in",archiveOutcome:null,updatedAt:createdAt}).where(eq(availabilityRequests.id,requestId)).returning();
-  if(updated.length)await recordAvailabilityEvent({requestId,eventType:"checkin_submitted",fromStatus:current[0]?.status??null,toStatus:"checked_in",actorEmail:actorEmail??null,note:actorEmail?"Check-in compilato dall’operatore":"Check-in online completato dall’ospite",body,createdAt});
+  if(updated.length)await recordAvailabilityEvent({requestId,eventType:existing.length?"checkin_updated":"checkin_submitted",fromStatus:current[0]?.status??null,toStatus:"checked_in",actorEmail:actorEmail??null,note:existing.length?(actorEmail?"Check-in aggiornato dall’operatore":"Check-in aggiornato dall’ospite"):(actorEmail?"Check-in compilato dall’operatore":"Check-in online completato dall’ospite"),body:JSON.stringify(submission),createdAt});
   return updated;
+}
+
+export async function getCheckinSubmission(requestId:string){
+  if(usesPostgres())return (await postgresRepository()).getCheckinSubmission(requestId);
+  const {getDb}=await import(".");const db=getDb();const practices=await db.select().from(checkinPractices).where(eq(checkinPractices.requestId,requestId));const practice=practices[0];if(!practice)return null;
+  const guests=await db.select().from(checkinGuests).where(eq(checkinGuests.requestId,requestId)).orderBy(asc(checkinGuests.ordinal));
+  return checkinDraft(practice,guests);
 }
 
 export async function findActiveQuoteByTokenHash(tokenHash:string):Promise<PublicQuote|null>{
@@ -107,4 +119,10 @@ export async function recordAvailabilityEvent(event:NewAvailabilityEvent){
 export async function listAvailabilityEvents(){
   if(usesPostgres())return (await postgresRepository()).listAvailabilityEvents();
   const {getDb}=await import(".");return getDb().select().from(availabilityEvents).orderBy(asc(availabilityEvents.createdAt));
+}
+
+function checkinDraft(practice:typeof checkinPractices.$inferSelect,guests:Array<typeof checkinGuests.$inferSelect>){
+  const values:Record<string,string>={"arrival-time":practice.arrivalTime,transport:practice.transport,"arrival-notes":practice.arrivalNotes};
+  for(const guest of guests){const prefix=guest.ordinal===0?"lead":`guest-${guest.ordinal}`;values[`${prefix}-name`]=guest.firstName;values[`${prefix}-surname`]=guest.lastName;values[`${prefix}-birth`]=guest.birthDate;values[`${prefix}-sex`]=guest.sexCode;values[`${prefix}-citizenship`]=guest.citizenshipCode;values[`${prefix}-birthCountry`]=guest.birthCountryCode;if(guest.birthPlaceCode)values[`${prefix}-birthPlace`]=guest.birthPlaceCode;if(guest.documentTypeCode)values[`${prefix}-documentType`]=guest.documentTypeCode;if(guest.documentNumber)values[`${prefix}-documentNumber`]=guest.documentNumber;if(guest.issuePlaceCode)values[`${prefix}-issuePlace`]=guest.issuePlaceCode;}
+  return {state:practice.state,language:practice.language,guestCount:practice.guestCount,groupType:practice.groupType,version:practice.version,values};
 }

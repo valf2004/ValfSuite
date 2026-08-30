@@ -3,9 +3,11 @@
 import { FormEvent, MouseEvent, useMemo, useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
+import type {AlloggiatiLookupValue} from "../../db/alloggiati-lookups";
 
 type Lang = "it" | "en" | "fr" | "es" | "de";
-type Booking = { id:string; name:string; arrivalDate:string; departureDate:string; guestCount:number; language:string; alreadyCompleted:boolean };
+type CheckinDraft={state:string;language:string;guestCount:number;groupType:"single"|"family"|"group";version:number;values:Record<string,string>};
+type Booking = { id:string; name:string; arrivalDate:string; departureDate:string; guestCount:number; language:string; draft?:CheckinDraft|null };
 
 const languageNames: Record<Lang, string> = { it: "Italiano", en: "English", fr: "Français", es: "Español", de: "Deutsch" };
 const text: Record<Lang, Record<string, string>> = {
@@ -17,6 +19,13 @@ const text: Record<Lang, Record<string, string>> = {
 };
 
 const steps = ["stay", "lead", "guests", "arrival", "review"] as const;
+const groupText:Record<Lang,{label:string;family:string;group:string}>={
+  it:{label:"Composizione degli ospiti",family:"Famiglia",group:"Gruppo"},
+  en:{label:"Guest composition",family:"Family",group:"Group"},
+  fr:{label:"Composition des voyageurs",family:"Famille",group:"Groupe"},
+  es:{label:"Composición de huéspedes",family:"Familia",group:"Grupo"},
+  de:{label:"Zusammensetzung der Gäste",family:"Familie",group:"Gruppe"},
+};
 
 const arrivalText: Record<Lang, { step:string; time:string; transport:string; notes:string; car:string; train:string; plane:string; other:string; help:string }> = {
   it: { step:"Arrivo", time:"Orario previsto", transport:"Come arriverete?", notes:"Note per Angela (facoltative)", car:"Auto", train:"Treno", plane:"Aereo", other:"Altro", help:"Queste informazioni ci aiutano ad accogliervi al momento giusto." },
@@ -42,28 +51,30 @@ const liveText:Record<Lang,{badge:string;badgeText:string;complete:string;comple
   de:{badge:"Sicherer Check-in",badgeText:"Ihre Angaben werden ausschließlich Ihrer Buchung zugeordnet.",complete:"Online-Check-in abgeschlossen",completeText:"Vielen Dank. Wir haben Ihre Aufenthaltsdaten gespeichert; Angela prüft die Originaldokumente bei der Anreise.",error:"Der Check-in konnte nicht übermittelt werden. Prüfen Sie Ihre Angaben und versuchen Sie es erneut."},
 };
 
-export function GuestCheckin({token,booking,submitUrl,operatorMode=false}:{token?:string;booking?:Booking;submitUrl?:string;operatorMode?:boolean}={}) {
+export function GuestCheckin({token,booking,submitUrl,operatorMode=false,lookups=[]}:{token?:string;booking?:Booking;submitUrl?:string;operatorMode?:boolean;lookups?:AlloggiatiLookupValue[]}={}) {
   const initialLang=(operatorMode?"it":booking?.language&&booking.language in languageNames?booking.language:"it") as Lang;
   const [lang, setLang] = useState<Lang>(initialLang);
   const [step, setStep] = useState(0);
   const [guestCount, setGuestCount] = useState(booking?.guestCount||2);
+  const [groupType,setGroupType]=useState<""|"single"|"family"|"group">(booking?.guestCount===1?"single":booking?.draft?.groupType||"");
   const [complete, setComplete] = useState(false);
   const [submitting,setSubmitting]=useState(false);
   const [submitError,setSubmitError]=useState("");
-  const [values, setValues] = useState<Record<string,string>>(booking?{reference:booking.id,"arrival-date":booking.arrivalDate,"departure-date":booking.departureDate}:{ reference: "VALF-DEMO-01" });
+  const [values, setValues] = useState<Record<string,string>>(booking?{reference:booking.id,"arrival-date":booking.arrivalDate,"departure-date":booking.departureDate,...booking.draft?.values}:{ reference: "VALF-DEMO-01" });
   const [dateError, setDateError] = useState("");
   const [dateErrorFields, setDateErrorFields] = useState<string[]>([]);
   const t = text[lang];
   const a = arrivalText[lang];
   const d = dateText[lang];
   const today = isoDate(new Date());
+  const minimumArrival = booking?.arrivalDate || today;
   const oldestBirthDate = shiftYears(today, -120);
   const adultBirthDate = shiftYears(today, -18);
   const companions = useMemo(() => Array.from({ length: Math.max(0, guestCount - 1) }), [guestCount]);
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    const error = validateCurrentDates(step, values, today, oldestBirthDate, adultBirthDate, d);
+    const error = validateCurrentDates(step, values, minimumArrival, today, oldestBirthDate, adultBirthDate, d);
     if (error) {
       setDateError(error.message);
       setDateErrorFields(error.fields);
@@ -76,7 +87,7 @@ export function GuestCheckin({token,booking,submitUrl,operatorMode=false}:{token
     else if(booking&&(token||submitUrl)){
       setSubmitting(true);setSubmitError("");
       try{
-        const response=await fetch(submitUrl||`/api/checkin/${token}`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({guestCount,language:lang,values,privacyAccepted:true})});
+        const response=await fetch(submitUrl||`/api/checkin/${token}`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({guestCount,groupType,language:lang,values,privacyAccepted:true})});
         if(response.ok)setComplete(true);else if(response.status===401&&operatorMode)window.location.replace("/area-riservata?sessione=scaduta");else{const data=await response.json().catch(()=>({}));setSubmitError(data.message||liveText[lang].error);}
       }catch{setSubmitError(liveText[lang].error);}
       finally{setSubmitting(false);}
@@ -84,7 +95,7 @@ export function GuestCheckin({token,booking,submitUrl,operatorMode=false}:{token
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
-  if (complete||booking?.alreadyCompleted) return <main className="checkin-page"><CheckinHeader lang={lang} setLang={setLang} operatorMode={operatorMode}/><section className="checkin-complete"><span>✓</span><p className="eyebrow">VALF Suite</p><h1>{operatorMode?"Check-in registrato":booking?liveText[lang].complete:t.complete}</h1><p>{operatorMode?"I dati sono stati salvati e la prenotazione è passata allo stato Check-in eseguito.":booking?liveText[lang].completeText:t.completeText}</p><Link className="button" href={operatorMode?"/area-riservata":lang === "it" ? "/" : `/${lang}`} onClick={operatorMode?undefined:event => navigateHome(event, lang)}>{operatorMode?"Torna all’area riservata":t.home}</Link></section></main>;
+  if (complete) return <main className="checkin-page"><CheckinHeader lang={lang} setLang={setLang} operatorMode={operatorMode}/><section className="checkin-complete"><span>✓</span><p className="eyebrow">VALF Suite</p><h1>{operatorMode?"Check-in registrato":booking?liveText[lang].complete:t.complete}</h1><p>{operatorMode?"I dati sono stati salvati. La scheda resta modificabile fino all’invio ad Alloggiati Web.":booking?"Grazie. I dati sono stati registrati e possono essere corretti fino all’invio ad Alloggiati Web.":t.completeText}</p><Link className="button" href={operatorMode?"/area-riservata":lang === "it" ? "/" : `/${lang}`} onClick={operatorMode?navigateOperatorArea:event => navigateHome(event, lang)}>{operatorMode?"Torna all’area riservata":t.home}</Link></section></main>;
 
   return <main className="checkin-page">
     <CheckinHeader lang={lang} setLang={setLang} operatorMode={operatorMode}/>
@@ -95,10 +106,11 @@ export function GuestCheckin({token,booking,submitUrl,operatorMode=false}:{token
         {steps.map((key, index) => <li key={key} className={index === step ? "active" : index < step ? "done" : ""} aria-current={index === step ? "step" : undefined}><span>{index < step ? "✓" : index + 1}</span><b>{key === "arrival" ? a.step : t[key]}</b></li>)}
       </ol>
       <form className="checkin-form" onSubmit={submit} onInvalid={event => { const target = event.target as HTMLInputElement; if (target.type !== "date") return; event.preventDefault(); const message = target.name === "arrival-date" ? d.pastArrival : target.name === "departure-date" ? d.departureOrder : target.name === "lead-birth" && target.validity.rangeOverflow ? d.adultLead : target.validity.rangeUnderflow ? d.oldBirth : d.futureBirth; setDateError(message); setDateErrorFields([target.name]); requestAnimationFrame(() => target.focus()); }} onChange={event => { const target = event.target as unknown as HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement; if (target.name) { setDateError(""); setDateErrorFields([]); setValues(current => ({ ...current, [target.name]: target.value })); } }}>
+        <LookupDatalists lookups={lookups}/>
         {(dateError||submitError) && <p id="form-date-error" className="form-error" role="alert">{dateError||submitError}</p>}
-        {step === 0 && <fieldset><legend>{t.stay}</legend><p className="form-help">VALF Suite · Via Aurelia Nord 97, Arcola (SP)</p><div className="checkin-grid"><Field label={t.arrival} name="arrival-date" type="date" min={today} defaultValue={values["arrival-date"]} invalid={dateErrorFields.includes("arrival-date")}/><Field label={t.departure} name="departure-date" type="date" min={values["arrival-date"] ? nextDay(values["arrival-date"]) : nextDay(today)} defaultValue={values["departure-date"]} invalid={dateErrorFields.includes("departure-date")}/><label>{t.count}<select value={guestCount} disabled={Boolean(booking)} onChange={e=>setGuestCount(Number(e.target.value))}>{[1,2,3,4].map(n=><option key={n} value={n}>{n}</option>)}</select></label><Field label={t.reference} name="reference" defaultValue={values.reference}/></div></fieldset>}
-        {step === 1 && <fieldset><legend>{t.lead}</legend><p className="form-help">{t.legal}</p><PersonFields t={t} values={values} prefix="lead" minBirth={oldestBirthDate} maxBirth={adultBirthDate} invalidFields={dateErrorFields} document/></fieldset>}
-        {step === 2 && <fieldset><legend>{t.guests}</legend>{companions.length === 0 ? <p className="empty-guests">—</p> : companions.map((_, index)=><section className="companion" key={index}><h2>{t.guests} {index + 1}</h2><PersonFields t={t} values={values} prefix={`guest-${index + 1}`} minBirth={oldestBirthDate} maxBirth={today} invalidFields={dateErrorFields}/></section>)}</fieldset>}
+        {step === 0 && <fieldset><legend>{t.stay}</legend><p className="form-help">VALF Suite · Via Aurelia Nord 97, Arcola (SP)</p><div className="checkin-grid"><Field label={t.arrival} name="arrival-date" type="date" min={minimumArrival} defaultValue={values["arrival-date"]} invalid={dateErrorFields.includes("arrival-date")}/><Field label={t.departure} name="departure-date" type="date" min={values["arrival-date"] ? nextDay(values["arrival-date"]) : nextDay(minimumArrival)} defaultValue={values["departure-date"]} invalid={dateErrorFields.includes("departure-date")}/><label>{t.count}<select value={guestCount} disabled={Boolean(booking)} onChange={e=>{const count=Number(e.target.value);setGuestCount(count);setGroupType(count===1?"single":"");}}>{[1,2,3,4].map(n=><option key={n} value={n}>{n}</option>)}</select></label>{guestCount>1&&<label>{groupText[lang].label}<select value={groupType} required onChange={event=>setGroupType(event.target.value as "family"|"group")}><option value="" disabled>{t.choose}</option><option value="family">{groupText[lang].family}</option><option value="group">{groupText[lang].group}</option></select></label>}<Field label={t.reference} name="reference" defaultValue={values.reference}/></div></fieldset>}
+        {step === 1 && <fieldset><legend>{t.lead}</legend><p className="form-help">{t.legal}</p><PersonFields t={t} values={values} prefix="lead" minBirth={oldestBirthDate} maxBirth={adultBirthDate} invalidFields={dateErrorFields} lookups={lookups} document/></fieldset>}
+        {step === 2 && <fieldset><legend>{t.guests}</legend>{companions.length === 0 ? <p className="empty-guests">—</p> : companions.map((_, index)=><section className="companion" key={index}><h2>{t.guests} {index + 1}</h2><PersonFields t={t} values={values} prefix={`guest-${index + 1}`} minBirth={oldestBirthDate} maxBirth={today} invalidFields={dateErrorFields} lookups={lookups}/></section>)}</fieldset>}
         {step === 3 && <fieldset><legend>{a.step}</legend><p className="form-help">{a.help}</p><div className="checkin-grid"><Field label={a.time} name="arrival-time" type="time" defaultValue={values["arrival-time"]}/><label>{a.transport}<select name="transport" required defaultValue={values.transport || ""}><option value="" disabled>{t.choose}</option><option>{a.car}</option><option>{a.train}</option><option>{a.plane}</option><option>{a.other}</option></select></label><label className="field-wide">{a.notes}<textarea name="arrival-notes" rows={5} defaultValue={values["arrival-notes"]}/></label></div></fieldset>}
         {step === 4 && <fieldset><legend>{t.review}</legend><div className="review-card"><div><small>{t.stay}</small><strong>{values["arrival-date"] || "—"} → {values["departure-date"] || "—"}</strong><span>{guestCount} {t.count.toLowerCase()}</span></div><div><small>{t.reference}</small><strong>{values.reference || "—"}</strong><span>{values["lead-name"]} {values["lead-surname"]}</span></div><div><small>{a.step}</small><strong>{values.transport || "—"} · {values["arrival-time"] || "—"}</strong><span>{values["arrival-notes"] || a.help}</span></div></div><p className="legal-note">{t.legal}</p><label className="checkin-consent"><input type="checkbox" required/><span>{t.privacy}</span></label></fieldset>}
         <div className="checkin-actions">{step > 0 && <button type="button" className="button-secondary" disabled={submitting} onClick={()=>setStep(step-1)}>{t.back}</button>}<button className="button" type="submit" disabled={submitting}>{submitting?"…":step === steps.length - 1 ? operatorMode?"Registra check-in":t.send : t.next}</button></div>
@@ -108,15 +120,31 @@ export function GuestCheckin({token,booking,submitUrl,operatorMode=false}:{token
   </main>;
 }
 
-function CheckinHeader({lang,setLang,operatorMode=false}:{lang:Lang;setLang:(lang:Lang)=>void;operatorMode?:boolean}) { return <header className="checkin-header"><Link href={operatorMode?"/area-riservata":lang === "it" ? "/" : `/${lang}`} onClick={operatorMode?undefined:event => navigateHome(event, lang)}><Image src="/logo-valf-suite.png" width={174} height={64} alt="VALF Suite" priority/></Link><label><span className="sr-only">Language</span><select value={lang} onChange={e=>setLang(e.target.value as Lang)}>{(Object.keys(languageNames) as Lang[]).map(key=><option value={key} key={key}>{languageNames[key]}</option>)}</select></label></header>; }
+function CheckinHeader({lang,setLang,operatorMode=false}:{lang:Lang;setLang:(lang:Lang)=>void;operatorMode?:boolean}) { const logo=<Image src="/logo-valf-suite.png" width={174} height={64} alt="VALF Suite" priority/>;return <header className="checkin-header"><Link href={operatorMode?"/area-riservata":lang === "it" ? "/" : `/${lang}`} onClick={operatorMode?navigateOperatorArea:event => navigateHome(event, lang)}>{logo}</Link><label><span className="sr-only">Language</span><select value={lang} onChange={e=>setLang(e.target.value as Lang)}>{(Object.keys(languageNames) as Lang[]).map(key=><option value={key} key={key}>{languageNames[key]}</option>)}</select></label></header>; }
 
-function Field({label,name,type="text",defaultValue,min,max,invalid=false}:{label:string;name:string;type?:string;defaultValue?:string;min?:string;max?:string;invalid?:boolean}) { return <label className={invalid ? "field-error" : undefined}>{label}<input name={name} type={type} defaultValue={defaultValue} min={min} max={max} required aria-invalid={invalid || undefined} aria-describedby={invalid ? "form-date-error" : undefined}/></label>; }
+function Field({label,name,type="text",defaultValue,min,max,invalid=false,required=true}:{label:string;name:string;type?:string;defaultValue?:string;min?:string;max?:string;invalid?:boolean;required?:boolean}) { return <label className={invalid ? "field-error" : undefined}>{label}<input name={name} type={type} defaultValue={defaultValue} min={min} max={max} required={required} aria-invalid={invalid || undefined} aria-describedby={invalid ? "form-date-error" : undefined}/></label>; }
 
-function PersonFields({t,values,prefix,minBirth,maxBirth,invalidFields,document=false}:{t:Record<string,string>;values:Record<string,string>;prefix:string;minBirth:string;maxBirth:string;invalidFields:string[];document?:boolean}) { const name=(key:string)=>`${prefix}-${key}`; return <div className="checkin-grid"><Field label={t.name} name={name("name")} defaultValue={values[name("name")]}/><Field label={t.surname} name={name("surname")} defaultValue={values[name("surname")]}/><Field label={t.birth} name={name("birth")} type="date" min={minBirth} max={maxBirth} defaultValue={values[name("birth")]} invalid={invalidFields.includes(name("birth"))}/><label>{t.sex}<select name={name("sex")} required defaultValue={values[name("sex")] || ""}><option value="" disabled>{t.choose}</option><option>{t.male}</option><option>{t.female}</option></select></label><Field label={t.citizenship} name={name("citizenship")} defaultValue={values[name("citizenship")]}/><Field label={t.birthCountry} name={name("birthCountry")} defaultValue={values[name("birthCountry")]}/><Field label={t.birthPlace} name={name("birthPlace")} defaultValue={values[name("birthPlace")]}/>{document && <><label>{t.documentType}<select name={name("documentType")} required defaultValue={values[name("documentType")] || ""}><option value="" disabled>{t.choose}</option><option>Identity card</option><option>Passport</option><option>Driving licence</option></select></label><Field label={t.documentNumber} name={name("documentNumber")} defaultValue={values[name("documentNumber")]}/><Field label={t.issuePlace} name={name("issuePlace")} defaultValue={values[name("issuePlace")]}/></>}</div>; }
+function PersonFields({t,values,prefix,minBirth,maxBirth,invalidFields,lookups,document=false}:{t:Record<string,string>;values:Record<string,string>;prefix:string;minBirth:string;maxBirth:string;invalidFields:string[];lookups:AlloggiatiLookupValue[];document?:boolean}) {
+  const name=(key:string)=>`${prefix}-${key}`;const places=lookups.filter(row=>row.tableName==="Luoghi");const countries=places.filter(isForeignPlace);const documents=lookups.filter(row=>row.tableName==="Tipi_Documento");
+  return <div className="checkin-grid"><Field label={t.name} name={name("name")} defaultValue={values[name("name")]}/><Field label={t.surname} name={name("surname")} defaultValue={values[name("surname")]}/><Field label={t.birth} name={name("birth")} type="date" min={minBirth} max={maxBirth} defaultValue={values[name("birth")]} invalid={invalidFields.includes(name("birth"))}/><label>{t.sex}<select name={name("sex")} required defaultValue={values[name("sex")] || ""}><option value="" disabled>{t.choose}</option><option value="1">{t.male}</option><option value="2">{t.female}</option></select></label><ReferenceField label={t.citizenship} name={name("citizenship")} value={values[name("citizenship")]} options={countries}/><ReferenceField label={t.birthCountry} name={name("birthCountry")} value={values[name("birthCountry")]} options={countries}/><ReferenceField label={t.birthPlace} name={name("birthPlace")} value={values[name("birthPlace")]} listId="alloggiati-places" available={Boolean(places.length)} required={false}/>{document && <><ReferenceField label={t.documentType} name={name("documentType")} value={values[name("documentType")]} options={documents}/><Field label={t.documentNumber} name={name("documentNumber")} defaultValue={values[name("documentNumber")]}/><ReferenceField label={t.issuePlace} name={name("issuePlace")} value={values[name("issuePlace")]} listId="alloggiati-places" available={Boolean(places.length)}/></>}</div>;
+}
 
-function validateCurrentDates(step:number, values:Record<string,string>, today:string, oldest:string, adult:string, messages:typeof dateText.it) {
+function ReferenceField({label,name,value,listId="",available=false,options,required=true}:{label:string;name:string;value?:string;listId?:string;available?:boolean;options?:AlloggiatiLookupValue[];required?:boolean}){
+  if(options?.length)return <label>{label}<select name={name} required={required} defaultValue={value||""}><option value="">{required?"Seleziona":"Non indicato"}</option>{options.map(option=><option key={option.itemKey} value={option.itemKey}>{option.itemValue}</option>)}</select></label>;
+  if(!available)return <Field label={label} name={name} defaultValue={value} required={required}/>;
+  return <label>{label}<input name={name} list={listId} defaultValue={value} required={required} autoComplete="off"/></label>;
+}
+
+function LookupDatalists({lookups}:{lookups:AlloggiatiLookupValue[]}){
+  const places=lookups.filter(row=>row.tableName==="Luoghi");
+  return <datalist id="alloggiati-places">{places.map(option=><option key={option.itemKey} value={option.itemKey}>{option.itemValue}</option>)}</datalist>;
+}
+
+function isForeignPlace(row:AlloggiatiLookupValue){return Object.values(row.metadata).some(value=>/^(EE|ES)$/i.test(value.trim()));}
+
+function validateCurrentDates(step:number, values:Record<string,string>, minimumArrival:string, today:string, oldest:string, adult:string, messages:typeof dateText.it) {
   if (step === 0) {
-    if (values["arrival-date"] < today) return { message:messages.pastArrival, fields:["arrival-date"] };
+    if (values["arrival-date"] < minimumArrival) return { message:messages.pastArrival, fields:["arrival-date"] };
     if (values["departure-date"] <= values["arrival-date"]) return { message:messages.departureOrder, fields:["arrival-date","departure-date"] };
   }
   if (step === 1 || step === 2) {
@@ -134,3 +162,4 @@ function isoDate(date:Date) { const year=date.getFullYear(); const month=String(
 function shiftYears(value:string, years:number) { const date=new Date(`${value}T12:00:00`); date.setFullYear(date.getFullYear()+years); return isoDate(date); }
 function nextDay(value:string) { const date=new Date(`${value}T12:00:00`); date.setDate(date.getDate()+1); return isoDate(date); }
 function navigateHome(event:MouseEvent<HTMLAnchorElement>, lang:Lang) { event.preventDefault(); window.location.assign(lang === "it" ? "/" : `/${lang}`); }
+function navigateOperatorArea(event:MouseEvent<HTMLAnchorElement>){event.preventDefault();window.location.assign("/area-riservata");}

@@ -14,6 +14,9 @@ export const alloggiatiLookupValues = sqliteTable("alloggiati_lookup_values", {
   tableName: text("table_name").notNull(),
   itemKey: text("item_key").notNull(),
   itemValue: text("item_value").notNull(),
+  metadataJson: text("metadata_json").notNull().default("{}"),
+  active: integer("active", { mode: "boolean" }).notNull().default(true),
+  syncedAt: text("synced_at").notNull().default(sql`CURRENT_TIMESTAMP`),
 }, (table) => [
   uniqueIndex("idx_alloggiati_lookup_table_key").on(table.tableName, table.itemKey),
   index("idx_alloggiati_lookup_table").on(table.tableName),
@@ -48,10 +51,48 @@ export const availabilityRequests = sqliteTable("availability_requests", {
   index("idx_availability_requests_arrival").on(table.arrivalDate),
 ]);
 
+export const checkinPractices = sqliteTable("checkin_practices", {
+  requestId: text("request_id").primaryKey().references(() => availabilityRequests.id, { onDelete: "cascade" }),
+  state: text("state", { enum: ["draft", "ready", "validated", "sent", "error"] }).notNull().default("draft"),
+  language: text("language").notNull().default("it"),
+  guestCount: integer("guest_count").notNull(),
+  groupType: text("group_type", { enum: ["single", "family", "group"] }).notNull(),
+  arrivalTime: text("arrival_time").notNull(),
+  transport: text("transport").notNull(),
+  arrivalNotes: text("arrival_notes").notNull().default(""),
+  privacyAcceptedAt: text("privacy_accepted_at").notNull(),
+  source: text("source", { enum: ["guest", "operator"] }).notNull(),
+  version: integer("version").notNull().default(1),
+  lastError: text("last_error"),
+  sentAt: text("sent_at"),
+  createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+  updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+});
+
+export const checkinGuests = sqliteTable("checkin_guests", {
+  id: text("id").primaryKey(),
+  requestId: text("request_id").notNull().references(() => checkinPractices.requestId, { onDelete: "cascade" }),
+  ordinal: integer("ordinal").notNull(),
+  alloggiatiType: text("alloggiati_type").notNull(),
+  firstName: text("first_name").notNull(),
+  lastName: text("last_name").notNull(),
+  birthDate: text("birth_date").notNull(),
+  sexCode: text("sex_code").notNull(),
+  citizenshipCode: text("citizenship_code").notNull(),
+  birthCountryCode: text("birth_country_code").notNull(),
+  birthPlaceCode: text("birth_place_code"),
+  documentTypeCode: text("document_type_code"),
+  documentNumber: text("document_number"),
+  issuePlaceCode: text("issue_place_code"),
+}, (table) => [
+  uniqueIndex("idx_checkin_guests_request_ordinal").on(table.requestId, table.ordinal),
+  index("idx_checkin_guests_request").on(table.requestId),
+]);
+
 export const availabilityEvents = sqliteTable("availability_events", {
   id: text("id").primaryKey(),
   requestId: text("request_id").notNull().references(() => availabilityRequests.id, { onDelete: "cascade" }),
-  eventType: text("event_type", { enum: ["request_created", "related_request_created", "email_sent", "payment_reported", "payment_confirmed", "balance_requested", "checkin_invited", "checkin_submitted", "status_changed"] }).notNull(),
+  eventType: text("event_type", { enum: ["request_created", "related_request_created", "email_sent", "payment_reported", "payment_confirmed", "balance_requested", "checkin_invited", "checkin_submitted", "checkin_updated", "status_changed"] }).notNull(),
   fromStatus: text("from_status"),
   toStatus: text("to_status"),
   actorEmail: text("actor_email"),

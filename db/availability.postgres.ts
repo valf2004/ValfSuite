@@ -1,5 +1,6 @@
 import postgres, { type Sql } from "postgres";
-import { availabilityEvents, availabilityQuotes, availabilityRequests } from "./schema";
+import { availabilityEvents, availabilityRequests } from "./schema";
+import type { CheckinSubmissionRecord } from "../app/lib/checkin-submission";
 
 export type AvailabilityStatus = "quote_requested" | "quote_sent" | "accepted" | "checked_in" | "police_registered" | "archived";
 export type PaymentStatus = "unpaid" | "reported" | "partial" | "paid";
@@ -86,12 +87,24 @@ export async function recordGuestCommunication(input:GuestCommunicationInput) {
   return rows.map(mapRow);
 }
 
-export async function recordCheckinSubmission(requestId:string,body:string,actorEmail?:string) {
+export async function recordCheckinSubmission(requestId:string,submission:CheckinSubmissionRecord,actorEmail?:string) {
   await ready();
-  const current=await sql`SELECT status FROM availability_requests WHERE id=${requestId}`;const createdAt=new Date().toISOString();
-  const rows=await sql`UPDATE availability_requests SET status='checked_in',archive_outcome=NULL,updated_at=${createdAt} WHERE id=${requestId} RETURNING *`;
-  if(rows.length)await insertEvent({requestId,eventType:"checkin_submitted",fromStatus:current[0]?.status==null?null:String(current[0].status),toStatus:"checked_in",actorEmail:actorEmail??null,note:actorEmail?"Check-in compilato dall’operatore":"Check-in online completato dall’ospite",body,createdAt});
+  const current=await sql`SELECT status FROM availability_requests WHERE id=${requestId}`;const existing=await sql`SELECT version FROM checkin_practices WHERE request_id=${requestId}`;const createdAt=new Date().toISOString();
+  const rows=await sql.begin(async transaction=>{
+    await transaction`INSERT INTO checkin_practices (request_id,state,language,guest_count,group_type,arrival_time,transport,arrival_notes,privacy_accepted_at,source,version,created_at,updated_at) VALUES (${requestId},'ready',${submission.language},${submission.guestCount},${submission.groupType},${submission.arrivalTime},${submission.transport},${submission.arrivalNotes},${submission.privacyAcceptedAt},${actorEmail?"operator":"guest"},1,${createdAt},${createdAt}) ON CONFLICT (request_id) DO UPDATE SET state='ready',language=EXCLUDED.language,guest_count=EXCLUDED.guest_count,group_type=EXCLUDED.group_type,arrival_time=EXCLUDED.arrival_time,transport=EXCLUDED.transport,arrival_notes=EXCLUDED.arrival_notes,privacy_accepted_at=EXCLUDED.privacy_accepted_at,source=EXCLUDED.source,version=checkin_practices.version+1,last_error=NULL,updated_at=EXCLUDED.updated_at`;
+    await transaction`DELETE FROM checkin_guests WHERE request_id=${requestId}`;
+    for(const guest of submission.guests)await transaction`INSERT INTO checkin_guests (id,request_id,ordinal,alloggiati_type,first_name,last_name,birth_date,sex_code,citizenship_code,birth_country_code,birth_place_code,document_type_code,document_number,issue_place_code) VALUES (${`${requestId}:${guest.ordinal}`},${requestId},${guest.ordinal},${guest.alloggiatiType},${guest.firstName},${guest.lastName},${guest.birthDate},${guest.sexCode},${guest.citizenshipCode},${guest.birthCountryCode},${guest.birthPlaceCode},${guest.documentTypeCode},${guest.documentNumber},${guest.issuePlaceCode})`;
+    return transaction`UPDATE availability_requests SET status='checked_in',archive_outcome=NULL,updated_at=${createdAt} WHERE id=${requestId} RETURNING *`;
+  });
+  if(rows.length)await insertEvent({requestId,eventType:existing.length?"checkin_updated":"checkin_submitted",fromStatus:current[0]?.status==null?null:String(current[0].status),toStatus:"checked_in",actorEmail:actorEmail??null,note:existing.length?(actorEmail?"Check-in aggiornato dall’operatore":"Check-in aggiornato dall’ospite"):(actorEmail?"Check-in compilato dall’operatore":"Check-in online completato dall’ospite"),body:JSON.stringify(submission),createdAt});
   return rows.map(mapRow);
+}
+
+export async function getCheckinSubmission(requestId:string){
+  await ready();const practices=await sql`SELECT * FROM checkin_practices WHERE request_id=${requestId} LIMIT 1`;const practice=practices[0];if(!practice)return null;
+  const guests=await sql`SELECT * FROM checkin_guests WHERE request_id=${requestId} ORDER BY ordinal`;const values:Record<string,string>={"arrival-time":String(practice.arrival_time),transport:String(practice.transport),"arrival-notes":String(practice.arrival_notes||"")};
+  for(const guest of guests){const ordinal=Number(guest.ordinal);const prefix=ordinal===0?"lead":`guest-${ordinal}`;values[`${prefix}-name`]=String(guest.first_name);values[`${prefix}-surname`]=String(guest.last_name);values[`${prefix}-birth`]=dateValue(guest.birth_date);values[`${prefix}-sex`]=String(guest.sex_code);values[`${prefix}-citizenship`]=String(guest.citizenship_code);values[`${prefix}-birthCountry`]=String(guest.birth_country_code);if(guest.birth_place_code!=null)values[`${prefix}-birthPlace`]=String(guest.birth_place_code);if(guest.document_type_code!=null)values[`${prefix}-documentType`]=String(guest.document_type_code);if(guest.document_number!=null)values[`${prefix}-documentNumber`]=String(guest.document_number);if(guest.issue_place_code!=null)values[`${prefix}-issuePlace`]=String(guest.issue_place_code);}
+  return {state:String(practice.state),language:String(practice.language),guestCount:Number(practice.guest_count),groupType:String(practice.group_type),version:Number(practice.version),values};
 }
 
 export async function findActiveQuoteByTokenHash(tokenHash:string):Promise<PublicQuote|null> {
@@ -126,6 +139,9 @@ export async function listAvailabilityEvents(){await ready();const rows=await sq
 async function initializePostgres(client: Sql) {
   await client`CREATE TABLE IF NOT EXISTS alloggiati_lookup_values (id text PRIMARY KEY,table_name text NOT NULL,item_key text NOT NULL,item_value text NOT NULL,UNIQUE(table_name,item_key))`;
   await client`CREATE INDEX IF NOT EXISTS idx_alloggiati_lookup_table ON alloggiati_lookup_values (table_name)`;
+  await client`ALTER TABLE alloggiati_lookup_values ADD COLUMN IF NOT EXISTS metadata_json text NOT NULL DEFAULT '{}'`;
+  await client`ALTER TABLE alloggiati_lookup_values ADD COLUMN IF NOT EXISTS active boolean NOT NULL DEFAULT true`;
+  await client`ALTER TABLE alloggiati_lookup_values ADD COLUMN IF NOT EXISTS synced_at timestamptz NOT NULL DEFAULT now()`;
   await client`CREATE TABLE IF NOT EXISTS availability_requests (
     id text PRIMARY KEY,status text NOT NULL DEFAULT 'quote_requested',archive_outcome text,
     name text NOT NULL,email text NOT NULL,arrival_date date NOT NULL,departure_date date NOT NULL,
@@ -142,6 +158,9 @@ async function initializePostgres(client: Sql) {
   await client`ALTER TABLE availability_requests ADD COLUMN IF NOT EXISTS quote_subject text`;
   await client`ALTER TABLE availability_requests ADD COLUMN IF NOT EXISTS quote_body text`;
   await client`ALTER TABLE availability_requests ADD COLUMN IF NOT EXISTS quote_sent_at timestamptz`;
+  await client`CREATE TABLE IF NOT EXISTS checkin_practices (request_id text PRIMARY KEY REFERENCES availability_requests(id) ON DELETE CASCADE,state text NOT NULL DEFAULT 'draft',language text NOT NULL DEFAULT 'it',guest_count integer NOT NULL,group_type text NOT NULL,arrival_time text NOT NULL,transport text NOT NULL,arrival_notes text NOT NULL DEFAULT '',privacy_accepted_at timestamptz NOT NULL,source text NOT NULL,version integer NOT NULL DEFAULT 1,last_error text,sent_at timestamptz,created_at timestamptz NOT NULL DEFAULT now(),updated_at timestamptz NOT NULL DEFAULT now())`;
+  await client`CREATE TABLE IF NOT EXISTS checkin_guests (id text PRIMARY KEY,request_id text NOT NULL REFERENCES checkin_practices(request_id) ON DELETE CASCADE,ordinal integer NOT NULL,alloggiati_type text NOT NULL,first_name text NOT NULL,last_name text NOT NULL,birth_date date NOT NULL,sex_code text NOT NULL,citizenship_code text NOT NULL,birth_country_code text NOT NULL,birth_place_code text,document_type_code text,document_number text,issue_place_code text,UNIQUE(request_id,ordinal))`;
+  await client`CREATE INDEX IF NOT EXISTS idx_checkin_guests_request ON checkin_guests (request_id)`;
   await client`CREATE TABLE IF NOT EXISTS availability_events (id text PRIMARY KEY,request_id text NOT NULL REFERENCES availability_requests(id) ON DELETE CASCADE,event_type text NOT NULL,from_status text,to_status text,actor_email text,note text,subject text,body text,amount_cents integer,attachment_id text,attachment_name text,created_at timestamptz NOT NULL DEFAULT now())`;
   await client`ALTER TABLE availability_events ADD COLUMN IF NOT EXISTS attachment_id text`;
   await client`ALTER TABLE availability_events ADD COLUMN IF NOT EXISTS attachment_name text`;

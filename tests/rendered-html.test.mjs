@@ -489,3 +489,67 @@ test("operators can complete check-in from the private dashboard", async () => {
   assert.match(guestForm,/Registra check-in/);
   assert.match(repository,/Check-in compilato dall’operatore/);
 });
+
+test("keeps guest and operator check-ins editable until Alloggiati submission", async () => {
+  const [dashboard,operatorRoute,guestRoute,operatorPage,guestPage,form,repository,postgres,schema,migration]=await Promise.all([
+    source("app/area-privata/RequestsDashboard.tsx"),
+    source("app/api/gestione/checkin/[id]/route.ts"),
+    source("app/api/checkin/[token]/route.ts"),
+    source("app/area-riservata/checkin/[id]/page.tsx"),
+    source("app/checkin/[token]/page.tsx"),
+    source("app/checkin/GuestCheckin.tsx"),
+    source("db/availability.ts"),
+    source("db/availability.postgres.ts"),
+    source("db/schema.ts"),
+    source("drizzle/0011_thin_mach_iv.sql"),
+  ]);
+  assert.match(dashboard,/Modifica check-in/);
+  assert.match(operatorRoute,/["accepted","checked_in"]/);
+  assert.match(guestRoute,/["accepted","checked_in"]/);
+  assert.match(operatorRoute,/police_registered/);
+  assert.match(guestRoute,/police_registered/);
+  assert.match(operatorPage,/getCheckinSubmission/);
+  assert.match(guestPage,/getCheckinSubmission/);
+  assert.doesNotMatch(form,/alreadyCompleted/);
+  assert.match(form,/booking\.draft\?\.values/);
+  assert.match(form,/La scheda resta modificabile fino all’invio ad Alloggiati Web/);
+  assert.match(form,/navigateOperatorArea/);
+  assert.match(form,/window\.location\.assign\("\/area-riservata"\)/);
+  assert.match(repository,/checkin_updated/);
+  assert.match(postgres,/version=checkin_practices\.version\+1/);
+  assert.match(schema,/checkinPractices/);
+  assert.match(schema,/checkinGuests/);
+  assert.match(migration,/CREATE TABLE `checkin_practices`/);
+  assert.match(migration,/CREATE TABLE `checkin_guests`/);
+});
+
+test("imports and applies the official Alloggiati reference tables", async () => {
+  const [client,route,settings,form,submission,lookups,postgres,schema,migration]=await Promise.all([
+    source("app/lib/alloggiati-client.ts"),
+    source("app/api/gestione/alloggiati/tabelle/route.ts"),
+    source("app/area-privata/EnvironmentSettingsForm.tsx"),
+    source("app/checkin/GuestCheckin.tsx"),
+    source("app/lib/checkin-submission.ts"),
+    source("db/alloggiati-lookups.ts"),
+    source("db/alloggiati-lookups.postgres.ts"),
+    source("db/schema.ts"),
+    source("drizzle/0011_thin_mach_iv.sql"),
+  ]);
+  for(const name of ["Luoghi","Tipi_Documento","Tipi_Alloggiato","TipoErrore","ListaAppartamenti"])assert.match(client,new RegExp(name));
+  assert.match(client,/SOAPAction/);
+  assert.match(client,/parseLookupCsv/);
+  assert.match(client,/non contiene righe importabili/);
+  assert.match(route,/privateUserFromCookie/);
+  assert.match(settings,/Aggiorna tabelle Alloggiati/);
+  assert.match(form,/alloggiati-places/);
+  assert.match(form,/<option value="1">/);
+  assert.match(form,/<option value="2">/);
+  assert.match(submission,/validateCheckinLookupCodes/);
+  for(const code of ["16","17","18","19","20"])assert.match(submission,new RegExp(`"${code}"`));
+  assert.match(lookups,/active:false/);
+  assert.match(postgres,/ON CONFLICT \(table_name,item_key\)/);
+  assert.match(schema,/metadataJson/);
+  assert.match(schema,/syncedAt/);
+  assert.match(migration,/metadata_json/);
+  assert.match(migration,/synced_at/);
+});
