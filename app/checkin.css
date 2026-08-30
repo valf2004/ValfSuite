@@ -124,11 +124,18 @@
 .settings-security-note span { color:#5d7069; }
 .settings-grid { display:grid; grid-template-columns:1fr 1fr; gap:16px; }
 .settings-grid label { display:flex; flex-direction:column; gap:6px; color:#554940; font-size:12px; font-weight:800; }
-.settings-grid input,.settings-grid select { width:100%; min-height:42px; padding:9px 11px; border:1px solid #d8cec4; border-radius:10px; background:#fff; color:#302a25; font:inherit; font-weight:500; }
-.settings-grid input:focus,.settings-grid select:focus { outline:2px solid rgba(43,109,91,.2); border-color:var(--sea); }
-.settings-grid input:disabled { background:#f4f1ed; color:#8b8178; }
+.settings-grid input,.settings-grid select,.settings-grid textarea { width:100%; min-height:42px; padding:9px 11px; border:1px solid #d8cec4; border-radius:10px; background:#fff; color:#302a25; font:inherit; font-weight:500; }
+.settings-grid input:focus,.settings-grid select:focus,.settings-grid textarea:focus { outline:2px solid rgba(43,109,91,.2); border-color:var(--sea); }
+.settings-grid input:disabled,.settings-grid select:disabled,.settings-grid textarea:disabled { background:#f4f1ed; color:#8b8178; }
 .settings-grid small { min-height:14px; color:#81756b; font-weight:500; }
 .settings-wide { grid-column:1/-1; }
+.environment-groups { display:grid; gap:16px; }
+.environment-group { padding:16px; border:1px solid var(--line); border-radius:14px; background:#fcfbf9; }
+.environment-group > header { margin-bottom:14px; }
+.environment-group h2 { margin:0 0 3px; font-size:17px; }
+.environment-group > header p { margin:0; color:#81756b; font-size:12px; }
+.environment-group code { font-size:10px; color:#75695f; }
+.environment-settings-panel { max-width:1180px; }
 .settings-footer { display:flex; align-items:center; justify-content:space-between; gap:18px; margin-top:20px; padding-top:16px; border-top:1px solid var(--line); }
 .settings-footer small { color:#81756b; }
 .settings-footer button { min-height:40px; padding:9px 17px; border:0; border-radius:99px; background:var(--sea); color:white; font-weight:800; cursor:pointer; }

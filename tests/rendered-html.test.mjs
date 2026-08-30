@@ -410,26 +410,27 @@ test("configures deposit and balance percentages and persists the calculated pay
 });
 
 
-test("manages Alloggiati Web settings directly in the VM env file", async () => {
+test("manages the complete VM environment from one protected page", async () => {
   const [chrome,page,form,route,settings,schema,compose,example] = await Promise.all([
-    source("app/area-privata/PrivateChrome.tsx"),source("app/area-riservata/impostazioni/page.tsx"),source("app/area-privata/AlloggiatiSettingsForm.tsx"),source("app/api/gestione/impostazioni/alloggiati/route.ts"),source("app/lib/alloggiati-settings.ts"),source("db/schema.ts"),source("docker-compose.yml"),source(".env.example"),
+    source("app/area-privata/PrivateChrome.tsx"),source("app/area-riservata/impostazioni/page.tsx"),source("app/area-privata/EnvironmentSettingsForm.tsx"),source("app/api/gestione/impostazioni/route.ts"),source("app/lib/environment-settings.ts"),source("db/schema.ts"),source("docker-compose.yml"),source(".env.example"),
   ]);
   assert.ok(chrome.indexOf("settings-link") < chrome.indexOf('href="/api/auth/logout"'));
-  assert.match(chrome,/area-riservata\/impostazioni/);
   assert.match(page,/privateUserFromCookie/);
-  assert.match(page,/robots: \{ index: false, follow: false \}/);
-  assert.match(form,/Salva impostazioni/);
-  assert.match(form,/name="wsKey" disabled=\{!summary\.writable\} type="password"/);
-  assert.match(form,/aggiorna direttamente il file \.env persistente/);
+  assert.match(page,/EnvironmentSettingsForm/);
+  assert.match(form,/Salva nel \.env/);
+  assert.match(form,/input\[type="password"\]/);
+  assert.match(form,/setting\.editable/);
   assert.match(route,/privateUserFromCookie/);
   assert.match(settings,/ENV_FILE_PATH/);
   assert.match(settings,/writeFile\(envPath/);
   assert.match(settings,/updateEnvFile/);
-  assert.doesNotMatch(settings,/AES-GCM/);
+  assert.match(settings,/if\(replaced\.has\(match\[1\]\)\)return \[\]/);
+  assert.match(settings,/POSTGRES_PASSWORD[^}]*editable:false/);
+  assert.match(settings,/RECEIPTS_DIR[^}]*editable:false/);
+  for(const key of ["SMTP_APP_PASSWORD","GOOGLE_OAUTH_CLIENT_SECRET","AUTH_SESSION_SECRET","ALLOGGIATI_WSKEY","AUTHORIZED_ADMIN_EMAILS"]){assert.match(settings,new RegExp(key));assert.match(example,new RegExp(key));}
   assert.match(schema,/compatibilità con la migrazione 0009/);
   assert.match(compose,/ENV_FILE_PATH: \/app\/\.env\.runtime/);
   assert.match(compose,/\.\/\.env:\/app\/\.env\.runtime/);
-  for(const key of ["ALLOGGIATI_USER","ALLOGGIATI_PASSWORD","ALLOGGIATI_WSKEY","ALLOGGIATI_ACCOUNT_MODE","ALLOGGIATI_APARTMENT_ID"]){assert.match(compose,new RegExp(key));assert.match(example,new RegExp(key));}
 });
 
 test("operators can complete check-in from the private dashboard", async () => {

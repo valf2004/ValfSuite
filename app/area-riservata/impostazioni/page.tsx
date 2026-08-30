@@ -1,8 +1,8 @@
 import type { Metadata } from "next";
 import { headers } from "next/headers";
-import AlloggiatiSettingsForm from "../../area-privata/AlloggiatiSettingsForm";
+import EnvironmentSettingsForm from "../../area-privata/EnvironmentSettingsForm";
 import { PrivateHeader, PrivateLogin } from "../../area-privata/PrivateChrome";
-import { getAlloggiatiSettingsSummary } from "../../lib/alloggiati-settings";
+import { getEnvironmentSettingsSummary } from "../../lib/environment-settings";
 import { authIsConfigured, privateUserFromCookie } from "../../lib/google-auth";
 
 export const dynamic = "force-dynamic";
@@ -12,6 +12,6 @@ export default async function SettingsPage() {
   const requestHeaders = await headers();
   const user = await privateUserFromCookie(requestHeaders.get("cookie"));
   if (!user) return <PrivateLogin configured={authIsConfigured()}/>;
-  const summary = await getAlloggiatiSettingsSummary();
-  return <main className="dashboard-page"><PrivateHeader user={user} active="settings"/><AlloggiatiSettingsForm initialSummary={summary}/></main>;
+  const summary = await getEnvironmentSettingsSummary();
+  return <main className="dashboard-page"><PrivateHeader user={user} active="settings"/><EnvironmentSettingsForm initialSummary={summary}/></main>;
 }
