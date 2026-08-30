@@ -433,6 +433,47 @@ test("manages the complete VM environment from one protected page", async () => 
   assert.match(compose,/\.\/\.env:\/app\/\.env\.runtime/);
 });
 
+test("explains environment settings through an in-page help dialog", async () => {
+  const [form,settings,styles]=await Promise.all([source("app/area-privata/EnvironmentSettingsForm.tsx"),source("app/lib/environment-settings.ts"),source("app/checkin.css")]);
+  assert.match(form,/settings-help-button/);
+  assert.match(form,/role="dialog"/);
+  assert.match(form,/Attualmente VALF Suite non usa questo collegamento/);
+  assert.match(form,/event\.key==="Escape"/);
+  assert.match(settings,/Opzionale e attualmente non utilizzato/);
+  assert.match(styles,/settings-help-overlay/);
+});
+
+test("creates a generic Alloggiati lookup table", async () => {
+  const [schema,postgres,migration]=await Promise.all([source("db/schema.ts"),source("db/availability.postgres.ts"),source("drizzle/0010_youthful_preak.sql")]);
+  assert.match(schema,/alloggiati_lookup_values/);
+  for(const field of ["id","tableName","itemKey","itemValue"])assert.match(schema,new RegExp(field));
+  assert.match(schema,/idx_alloggiati_lookup_table_key/);
+  assert.match(postgres,/CREATE TABLE IF NOT EXISTS alloggiati_lookup_values/);
+  assert.match(migration,/alloggiati_lookup_values/);
+  assert.match(migration,/table_name/);
+  assert.match(migration,/item_key/);
+  assert.match(migration,/item_value/);
+});
+
+test("offers a protected read-only database console with bounded results", async () => {
+  const [page,component,route,repository,postgres,chrome,styles]=await Promise.all([source("app/area-riservata/database/page.tsx"),source("app/area-privata/DatabaseConsole.tsx"),source("app/api/gestione/database/route.ts"),source("db/database-console.ts"),source("db/database-console.postgres.ts"),source("app/area-privata/PrivateChrome.tsx"),source("app/checkin.css")]);
+  assert.match(page,/privateUserFromCookie/);
+  assert.match(page,/robots:{index:false,follow:false}/);
+  assert.match(route,/privateUserFromCookie/);
+  assert.match(chrome,/area-riservata\/database/);
+  assert.match(component,/SELECT \* FROM/);
+  assert.match(component,/Esegui SELECT/);
+  assert.match(repository,/sqlite_schema/);
+  assert.match(repository,/LIMIT 501/);
+  assert.match(repository,/Sono consentite query su una sola tabella/);
+  assert.match(repository,/Funzioni, sottoquery e commenti SQL non sono consentiti/);
+  assert.match(repository,/tables\.includes\(table\)/);
+  assert.match(postgres,/begin\("read only"/);
+  assert.match(postgres,/statement_timeout/);
+  assert.match(styles,/database-results-scroll \{ max-height:calc\(100vh - 330px\); min-height:180px; overflow:auto/);
+  assert.match(styles,/position:sticky/);
+});
+
 test("operators can complete check-in from the private dashboard", async () => {
   const [dashboard,operatorRoute,operatorPage,guestForm,repository]=await Promise.all([
     source("app/area-privata/RequestsDashboard.tsx"),

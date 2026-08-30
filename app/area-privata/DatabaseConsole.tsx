@@ -1,0 +1,14 @@
+"use client";
+import {useMemo,useState,type FormEvent} from "react";
+import type {DatabaseQueryResult} from "../../db/database-console";
+import {authenticatedFetch} from "./authenticated-fetch";
+
+export default function DatabaseConsole({tables}:{tables:string[]}){
+  const initial=tables.includes("alloggiati_lookup_values")?"alloggiati_lookup_values":tables[0]||"";
+  const [selected,setSelected]=useState(initial);const [query,setQuery]=useState(initial?`SELECT * FROM ${quoteIdentifier(initial)}`:"");const [result,setResult]=useState<DatabaseQueryResult|null>(null);const [error,setError]=useState("");const [loading,setLoading]=useState(false);
+  const rowLabel=useMemo(()=>result?`${result.rows.length}${result.truncated?` (primi ${result.limit})`:""}`:"",[result]);
+  function chooseTable(value:string){setSelected(value);setQuery(`SELECT * FROM ${quoteIdentifier(value)}`);setResult(null);setError("");}
+  async function execute(event:FormEvent){event.preventDefault();setLoading(true);setError("");try{const response=await authenticatedFetch("/api/gestione/database",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({query})});const data=await response.json().catch(()=>({}));if(!response.ok)throw new Error(data.error||"Impossibile eseguire la query.");setResult(data);}catch(cause){setResult(null);setError(cause instanceof Error?cause.message:"Impossibile eseguire la query.");}finally{setLoading(false);}}
+  return <section className="database-panel"><div className="database-heading"><div><p className="eyebrow">Consultazione</p><h1>Database</h1><p>Interroga le tabelle con query di sola lettura.</p></div><span className="database-readonly">Solo SELECT · massimo 500 righe</span></div><form className="database-query" onSubmit={execute}><label><span>Tabella</span><select value={selected} onChange={event=>chooseTable(event.target.value)}>{tables.map(table=><option key={table} value={table}>{table}</option>)}</select></label><label className="database-sql"><span>Query SQL</span><textarea value={query} onChange={event=>setQuery(event.target.value)} spellCheck={false} rows={4}/></label><button type="submit" disabled={loading||!query.trim()}>{loading?"Esecuzione…":"Esegui SELECT"}</button></form>{error&&<p className="settings-notice error" role="alert">{error}</p>}{result&&<section className="database-results"><header><h2>Risultato</h2><span>{rowLabel} record</span></header>{result.rows.length?<div className="database-results-scroll"><table><thead><tr>{result.columns.map(column=><th key={column}>{column}</th>)}</tr></thead><tbody>{result.rows.map((row,index)=><tr key={index}>{result.columns.map(column=><td key={column}>{row[column]===null?<em>NULL</em>:row[column]}</td>)}</tr>)}</tbody></table></div>:<p className="database-empty">La query non ha restituito record.</p>}</section>}</section>;
+}
+function quoteIdentifier(value:string){return `"${value.replace(/"/g,'""')}"`;}

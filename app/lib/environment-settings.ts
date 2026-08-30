@@ -14,7 +14,7 @@ const groupDefinitions=[
 
 const definitions:Definition[]=[
   {key:"PUBLIC_BASE_URL",label:"Indirizzo pubblico",group:"site",type:"url",editable:true},
-  {key:"AVAILABILITY_WEBHOOK_URL",label:"Webhook disponibilità",group:"site",type:"url",editable:true,note:"Può essere lasciato vuoto."},
+  {key:"AVAILABILITY_WEBHOOK_URL",label:"Webhook disponibilità",group:"site",type:"url",editable:true,note:"Opzionale e attualmente non utilizzato. Può restare vuoto."},
   {key:"SMTP_HOST",label:"Server SMTP",group:"email",type:"text",editable:true},
   {key:"SMTP_PORT",label:"Porta SMTP",group:"email",type:"number",editable:true},
   {key:"SMTP_SECURE",label:"Connessione sicura",group:"email",type:"select",editable:true,options:[{value:"true",label:"Sì"},{value:"false",label:"No"}]},

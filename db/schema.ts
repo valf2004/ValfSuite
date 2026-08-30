@@ -9,6 +9,16 @@ export const applicationSettings = sqliteTable("application_settings", {
   updatedBy: text("updated_by").notNull(),
 });
 
+export const alloggiatiLookupValues = sqliteTable("alloggiati_lookup_values", {
+  id: text("id").primaryKey(),
+  tableName: text("table_name").notNull(),
+  itemKey: text("item_key").notNull(),
+  itemValue: text("item_value").notNull(),
+}, (table) => [
+  uniqueIndex("idx_alloggiati_lookup_table_key").on(table.tableName, table.itemKey),
+  index("idx_alloggiati_lookup_table").on(table.tableName),
+]);
+
 export const availabilityRequests = sqliteTable("availability_requests", {
   id: text("id").primaryKey(),
   status: text("status", { enum: ["quote_requested", "quote_sent", "accepted", "checked_in", "police_registered", "archived"] }).notNull().default("quote_requested"),

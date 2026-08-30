@@ -71,6 +71,13 @@
       "when": 1788076010547,
       "tag": "0009_married_shadow_king",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "6",
+      "when": 1788079370157,
+      "tag": "0010_youthful_preak",
+      "breakpoints": true
     }
   ]
 }

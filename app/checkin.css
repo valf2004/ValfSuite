@@ -136,6 +136,38 @@
 .environment-group > header p { margin:0; color:#81756b; font-size:12px; }
 .environment-group code { font-size:10px; color:#75695f; }
 .environment-settings-panel { max-width:1180px; }
+.settings-heading-actions { display:flex; align-items:center; gap:8px; }
+.settings-help-button { width:32px; height:32px; border:1px solid var(--line); border-radius:50%; background:white; color:var(--sea); font-weight:900; cursor:pointer; }
+.settings-help-overlay { position:fixed; inset:0; z-index:100; display:grid; place-items:center; padding:20px; background:rgba(35,29,24,.48); }
+.settings-help { width:min(760px,100%); max-height:calc(100vh - 40px); overflow:auto; padding:20px; border-radius:18px; background:white; box-shadow:0 28px 80px rgba(26,20,16,.28); }
+.settings-help > header { display:flex; justify-content:space-between; gap:20px; align-items:flex-start; }
+.settings-help h2 { margin:2px 0 0; }
+.settings-help > header button { border:0; background:transparent; font-size:28px; cursor:pointer; }
+.settings-help-content { display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-top:16px; }
+.settings-help-content article { padding:13px; border:1px solid var(--line); border-radius:12px; background:#fcfbf9; }
+.settings-help-content h3 { margin:0 0 5px; font-size:14px; }
+.settings-help-content p { margin:0; color:#71655c; font-size:12px; line-height:1.55; }
+.database-panel { width:min(1476px,calc(100% - 40px)); margin:16px auto 40px; }
+.database-heading { display:flex; justify-content:space-between; gap:20px; align-items:flex-start; }
+.database-heading h1 { margin:2px 0 4px; font-size:clamp(25px,3vw,38px); }
+.database-heading p { margin:0; color:#76685d; }
+.database-readonly { padding:7px 11px; border-radius:99px; background:#eaf5ef; color:#23624e; font-size:11px; font-weight:800; }
+.database-query { display:grid; grid-template-columns:minmax(220px,.32fr) 1fr auto; gap:12px; align-items:end; margin-top:14px; padding:16px; border:1px solid var(--line); border-radius:16px; background:white; }
+.database-query label { display:flex; flex-direction:column; gap:6px; color:#554940; font-size:12px; font-weight:800; }
+.database-query select,.database-query textarea { width:100%; min-height:42px; padding:9px 11px; border:1px solid #d8cec4; border-radius:10px; background:white; font:inherit; }
+.database-query textarea { resize:vertical; font-family:ui-monospace,SFMono-Regular,Consolas,monospace; font-size:12px; }
+.database-query button { min-height:42px; padding:9px 16px; border:0; border-radius:99px; background:var(--sea); color:white; font-weight:800; cursor:pointer; }
+.database-query button:disabled { opacity:.6; }
+.database-results { margin-top:14px; border:1px solid var(--line); border-radius:16px; background:white; overflow:hidden; }
+.database-results > header { display:flex; justify-content:space-between; padding:12px 15px; border-bottom:1px solid var(--line); }
+.database-results h2 { margin:0; font-size:15px; }
+.database-results > header span { color:#76685d; font-size:12px; }
+.database-results-scroll { max-height:calc(100vh - 330px); min-height:180px; overflow:auto; }
+.database-results table { width:max-content; min-width:100%; border-collapse:collapse; font-size:11px; }
+.database-results th,.database-results td { max-width:420px; padding:8px 10px; border-right:1px solid #eee7df; border-bottom:1px solid #eee7df; text-align:left; vertical-align:top; white-space:pre-wrap; overflow-wrap:anywhere; }
+.database-results th { position:sticky; top:0; z-index:1; background:#f4f0ea; color:#594d44; }
+.database-results td em { color:#a09389; }
+.database-empty { padding:24px; color:#76685d; text-align:center; }
 .settings-footer { display:flex; align-items:center; justify-content:space-between; gap:18px; margin-top:20px; padding-top:16px; border-top:1px solid var(--line); }
 .settings-footer small { color:#81756b; }
 .settings-footer button { min-height:40px; padding:9px 17px; border:0; border-radius:99px; background:var(--sea); color:white; font-weight:800; cursor:pointer; }
@@ -317,6 +349,10 @@
   .dashboard-nav a { padding-left:9px; padding-right:9px; }
   .settings-panel { width:calc(100% - 24px); margin-top:14px; }
   .settings-heading { flex-direction:column; gap:10px; }
+  .settings-help-content { grid-template-columns:1fr; }
+  .database-panel { width:calc(100% - 24px); }
+  .database-heading,.database-query { grid-template-columns:1fr; flex-direction:column; }
+  .database-results-scroll { max-height:60vh; }
   .settings-grid { grid-template-columns:1fr; }
   .settings-wide { grid-column:auto; }
   .settings-security-note,.settings-footer { flex-direction:column; }

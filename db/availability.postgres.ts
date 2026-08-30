@@ -124,6 +124,8 @@ export async function recordAvailabilityEvent(event:NewAvailabilityEvent){await 
 export async function listAvailabilityEvents(){await ready();const rows=await sql`SELECT * FROM availability_events ORDER BY created_at ASC`;return rows.map(mapEventRow);}
 
 async function initializePostgres(client: Sql) {
+  await client`CREATE TABLE IF NOT EXISTS alloggiati_lookup_values (id text PRIMARY KEY,table_name text NOT NULL,item_key text NOT NULL,item_value text NOT NULL,UNIQUE(table_name,item_key))`;
+  await client`CREATE INDEX IF NOT EXISTS idx_alloggiati_lookup_table ON alloggiati_lookup_values (table_name)`;
   await client`CREATE TABLE IF NOT EXISTS availability_requests (
     id text PRIMARY KEY,status text NOT NULL DEFAULT 'quote_requested',archive_outcome text,
     name text NOT NULL,email text NOT NULL,arrival_date date NOT NULL,departure_date date NOT NULL,
