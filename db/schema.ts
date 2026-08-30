@@ -1,6 +1,7 @@
 import { sql } from "drizzle-orm";
 import { integer, sqliteTable, text, index, uniqueIndex } from "drizzle-orm/sqlite-core";
 
+// Tabella conservata per compatibilità con la migrazione 0009; la configurazione corrente vive nel file .env.
 export const applicationSettings = sqliteTable("application_settings", {
   key: text("key").primaryKey(),
   encryptedValue: text("encrypted_value").notNull(),

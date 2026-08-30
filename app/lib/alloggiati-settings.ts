@@ -1,6 +1,3 @@
-import { getStoredSettings, saveStoredSettings } from "../../db/settings";
-import { authConfig } from "./google-auth";
-
 export type AlloggiatiAccountMode = "standard" | "apartments";
 export type AlloggiatiSettingsSummary = {
   userConfigured: boolean;
@@ -10,7 +7,8 @@ export type AlloggiatiSettingsSummary = {
   accountMode: AlloggiatiAccountMode;
   userHint: string;
   apartmentIdHint: string;
-  source: "database" | "environment" | "none";
+  source: "file" | "environment" | "unavailable";
+  writable: boolean;
   updatedAt: string | null;
   updatedBy: string | null;
 };
@@ -23,35 +21,43 @@ export type AlloggiatiSettingsInput = {
   apartmentId?: unknown;
 };
 
-const settingKeys = {
-  user: "alloggiati.user",
-  password: "alloggiati.password",
-  wsKey: "alloggiati.wskey",
-  accountMode: "alloggiati.account_mode",
-  apartmentId: "alloggiati.apartment_id",
+const envKeys = {
+  user: "ALLOGGIATI_USER",
+  password: "ALLOGGIATI_PASSWORD",
+  wsKey: "ALLOGGIATI_WSKEY",
+  accountMode: "ALLOGGIATI_ACCOUNT_MODE",
+  apartmentId: "ALLOGGIATI_APARTMENT_ID",
 } as const;
 
-const databaseKeys = Object.values(settingKeys);
-
 export async function getAlloggiatiSettingsSummary(): Promise<AlloggiatiSettingsSummary> {
-  const result = await loadSettings();
-  const latest = result.rows.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))[0];
+  const values = await loadValues();
+  const envPath = process.env["ENV_FILE_PATH"]?.trim();
+  let updatedAt: string | null = null;
+  if (envPath) {
+    try {
+      const { stat } = await import("node:fs/promises");
+      updatedAt = (await stat(envPath)).mtime.toISOString();
+    } catch { /* The page remains usable and reports the write error on save. */ }
+  }
   return {
-    userConfigured: Boolean(result.values.user),
-    passwordConfigured: Boolean(result.values.password),
-    wsKeyConfigured: Boolean(result.values.wsKey),
-    apartmentIdConfigured: Boolean(result.values.apartmentId),
-    accountMode: result.values.accountMode,
-    userHint: mask(result.values.user),
-    apartmentIdHint: mask(result.values.apartmentId),
-    source: result.rows.length ? "database" : hasEnvironmentSettings() ? "environment" : "none",
-    updatedAt: latest?.updatedAt ?? null,
-    updatedBy: latest?.updatedBy ?? null,
+    userConfigured: Boolean(values.user),
+    passwordConfigured: Boolean(values.password),
+    wsKeyConfigured: Boolean(values.wsKey),
+    apartmentIdConfigured: Boolean(values.apartmentId),
+    accountMode: values.accountMode,
+    userHint: mask(values.user),
+    apartmentIdHint: mask(values.apartmentId),
+    source: envPath ? "file" : hasEnvironmentSettings() ? "environment" : "unavailable",
+    writable: Boolean(envPath),
+    updatedAt,
+    updatedBy: null,
   };
 }
 
-export async function saveAlloggiatiSettings(input: AlloggiatiSettingsInput, actorEmail: string) {
-  const current = (await loadSettings()).values;
+export async function saveAlloggiatiSettings(input: AlloggiatiSettingsInput, _actorEmail: string) {
+  const envPath = process.env["ENV_FILE_PATH"]?.trim();
+  if (!envPath) throw new Error("Il salvataggio diretto nel file .env è disponibile soltanto sulla VM di produzione.");
+  const current = await loadValues();
   if (input.accountMode !== undefined && input.accountMode !== "apartments" && input.accountMode !== "standard") throw new Error("Tipo account non valido.");
   const accountMode = input.accountMode === "apartments" ? "apartments" : input.accountMode === "standard" ? "standard" : current.accountMode;
   const values = {
@@ -61,84 +67,91 @@ export async function saveAlloggiatiSettings(input: AlloggiatiSettingsInput, act
     accountMode,
     apartmentId: keepOrReplace(current.apartmentId, input.apartmentId, 120, accountMode === "standard"),
   };
-
   if (!values.user || !values.password || !values.wsKey) throw new Error("Inserisci utente, password e WSKEY di Alloggiati Web.");
   if (accountMode === "apartments" && !values.apartmentId) throw new Error("Inserisci il codice appartamento per questo tipo di account.");
 
-  const updatedAt = new Date().toISOString();
-  await saveStoredSettings(await Promise.all(Object.entries(values).map(async ([name, value]) => ({
-    key: settingKeys[name as keyof typeof settingKeys],
-    encryptedValue: await encrypt(String(value)),
-    updatedAt,
-    updatedBy: actorEmail,
-  }))));
+  const { readFile, writeFile } = await import("node:fs/promises");
+  const currentFile = await readFile(envPath, "utf8");
+  const updatedFile = updateEnvFile(currentFile, {
+    [envKeys.user]: values.user,
+    [envKeys.password]: values.password,
+    [envKeys.wsKey]: values.wsKey,
+    [envKeys.accountMode]: values.accountMode,
+    [envKeys.apartmentId]: values.apartmentId,
+  });
+  await writeFile(envPath, updatedFile, { encoding: "utf8", mode: 0o600 });
+  for (const [name, value] of Object.entries(values)) process.env[envKeys[name as keyof typeof envKeys]] = String(value);
   return getAlloggiatiSettingsSummary();
 }
 
-async function loadSettings() {
-  const rows = await getStoredSettings(databaseKeys);
-  const decrypted = new Map<string, string>();
-  await Promise.all(rows.map(async (row) => {
-    try { decrypted.set(row.key, await decrypt(row.encryptedValue)); } catch { /* A damaged value is treated as missing. */ }
-  }));
-  const mode = decrypted.get(settingKeys.accountMode) || process.env["ALLOGGIATI_ACCOUNT_MODE"]?.trim();
+async function loadValues() {
+  const fromFile = new Map<string, string>();
+  const envPath = process.env["ENV_FILE_PATH"]?.trim();
+  if (envPath) {
+    try {
+      const { readFile } = await import("node:fs/promises");
+      const content = await readFile(envPath, "utf8");
+      for (const line of content.split(/\r?\n/)) {
+        const match = line.match(/^([A-Z][A-Z0-9_]*)=(.*)$/);
+        if (match) fromFile.set(match[1], decodeEnvValue(match[2]));
+      }
+    } catch { /* Fall back to the process environment. */ }
+  }
+  const value = (key: string) => fromFile.get(key) ?? process.env[key]?.trim() ?? "";
+  const mode = value(envKeys.accountMode);
   return {
-    rows,
-    values: {
-      user: decrypted.get(settingKeys.user) ?? process.env["ALLOGGIATI_USER"]?.trim() ?? "",
-      password: decrypted.get(settingKeys.password) ?? process.env["ALLOGGIATI_PASSWORD"]?.trim() ?? "",
-      wsKey: decrypted.get(settingKeys.wsKey) ?? process.env["ALLOGGIATI_WSKEY"]?.trim() ?? "",
-      accountMode: mode === "apartments" ? "apartments" as const : "standard" as const,
-      apartmentId: decrypted.get(settingKeys.apartmentId) ?? process.env["ALLOGGIATI_APARTMENT_ID"]?.trim() ?? "",
-    },
+    user: value(envKeys.user),
+    password: value(envKeys.password),
+    wsKey: value(envKeys.wsKey),
+    accountMode: mode === "apartments" ? "apartments" as const : "standard" as const,
+    apartmentId: value(envKeys.apartmentId),
   };
+}
+
+function updateEnvFile(content: string, updates: Record<string, string>) {
+  const remaining = new Map(Object.entries(updates));
+  const lines = content.replace(/\r\n/g, "\n").split("\n").map((line) => {
+    const match = line.match(/^([A-Z][A-Z0-9_]*)=/);
+    if (!match || !remaining.has(match[1])) return line;
+    const value = remaining.get(match[1]) ?? "";
+    remaining.delete(match[1]);
+    return match[1] + "=" + encodeEnvValue(value);
+  });
+  if (remaining.size) {
+    if (lines.at(-1) !== "") lines.push("");
+    lines.push("# Alloggiati Web · gestito dall'area riservata");
+    for (const [key, value] of remaining) lines.push(key + "=" + encodeEnvValue(value));
+  }
+  return lines.join("\n").replace(/\n+$/, "") + "\n";
+}
+
+function encodeEnvValue(value: string) {
+  if (/^[A-Za-z0-9._~:/@+,-]*$/.test(value)) return value;
+  return '"' + value.replace(/\\/g, "\\\\").replace(/"/g, '\\"').replace(/\$/g, "$$$$") + '"';
+}
+
+function decodeEnvValue(value: string) {
+  const trimmed = value.trim();
+  if (trimmed.startsWith('"') && trimmed.endsWith('"')) return trimmed.slice(1, -1).replace(/\\"/g, '"').replace(/\\\\/g, "\\").replace(/\$\$/g, "$");
+  if (trimmed.startsWith("'") && trimmed.endsWith("'")) return trimmed.slice(1, -1);
+  return trimmed;
 }
 
 function keepOrReplace(current: string, proposed: unknown, maxLength: number, allowClear = false) {
   if (proposed === undefined || proposed === null) return current;
   if (typeof proposed !== "string") throw new Error("Formato dei valori non valido.");
   const value = proposed.trim();
+  if (/\r|\n/.test(value)) throw new Error("I valori non possono contenere ritorni a capo.");
   if (value.length > maxLength) throw new Error("Uno dei valori inseriti è troppo lungo.");
   return value || (allowClear ? "" : current);
 }
 
 function hasEnvironmentSettings() {
-  return ["ALLOGGIATI_USER", "ALLOGGIATI_PASSWORD", "ALLOGGIATI_WSKEY", "ALLOGGIATI_APARTMENT_ID"].some((key) => Boolean(process.env[key]?.trim()));
+  return Object.values(envKeys).some((key) => Boolean(process.env[key]?.trim()));
 }
 
 function mask(value: string) {
   if (!value) return "";
   if (value.length < 5) return "••••";
-  return `${value.slice(0, 2)}••••${value.slice(-2)}`;
-}
-
-async function encryptionKey() {
-  const secret = authConfig().sessionSecret;
-  if (secret.length < 32) throw new Error("AUTH_SESSION_SECRET non configurato.");
-  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(`valfsuite-settings:${secret}`));
-  return crypto.subtle.importKey("raw", digest, "AES-GCM", false, ["encrypt", "decrypt"]);
-}
-
-async function encrypt(value: string) {
-  const iv = crypto.getRandomValues(new Uint8Array(12));
-  const encrypted = await crypto.subtle.encrypt({ name: "AES-GCM", iv }, await encryptionKey(), new TextEncoder().encode(value));
-  return `v1.${base64url(iv)}.${base64url(new Uint8Array(encrypted))}`;
-}
-
-async function decrypt(value: string) {
-  const [version, ivValue, cipherValue] = value.split(".");
-  if (version !== "v1" || !ivValue || !cipherValue) throw new Error("Formato cifrato non valido.");
-  const clear = await crypto.subtle.decrypt({ name: "AES-GCM", iv: fromBase64url(ivValue) }, await encryptionKey(), fromBase64url(cipherValue));
-  return new TextDecoder().decode(clear);
-}
-
-function base64url(value: Uint8Array) {
-  let binary = "";
-  value.forEach((byte) => binary += String.fromCharCode(byte));
-  return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "");
-}
-
-function fromBase64url(value: string) {
-  const padded = value.replace(/-/g, "+").replace(/_/g, "/").padEnd(Math.ceil(value.length / 4) * 4, "=");
-  return Uint8Array.from(atob(padded), (character) => character.charCodeAt(0));
+  return value.slice(0, 2) + "••••" + value.slice(-2);
 }

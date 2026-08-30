@@ -31,7 +31,7 @@ export default function AlloggiatiSettingsForm({ initialSummary }: { initialSumm
       const data = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(data.error || "Impossibile salvare le impostazioni.");
       setSummary(data.settings);
-      setNotice({ kind: "ok", text: "Impostazioni salvate e cifrate correttamente." });
+      setNotice({ kind: "ok", text: "Parametri salvati direttamente nel file .env della VM." });
       formElement.reset();
       setMode(data.settings.accountMode);
     } catch (error) {
@@ -44,19 +44,20 @@ export default function AlloggiatiSettingsForm({ initialSummary }: { initialSumm
   return <section className="settings-panel">
     <div className="settings-heading">
       <div><p className="eyebrow">Configurazione</p><h1>Alloggiati Web</h1><p>Credenziali del Web Service usato per la trasmissione delle schedine.</p></div>
-      <span className={`settings-source ${summary.source}`}>{summary.source === "database" ? "Configurazione protetta" : summary.source === "environment" ? "Valori iniziali da .env" : "Da configurare"}</span>
+      <span className={`settings-source ${summary.source}`}>{summary.source === "file" ? ".env della VM" : summary.source === "environment" ? "Ambiente in sola lettura" : "File .env non disponibile"}</span>
     </div>
     <form className="settings-form" onSubmit={submit}>
-      <div className="settings-security-note"><strong>Valori protetti</strong><span>Password e WSKEY vengono cifrate e non sono mai mostrate. Lascia un campo vuoto per mantenere il valore già configurato.</span></div>
+      <div className="settings-security-note"><strong>Un solo punto di configurazione</strong><span>Sulla VM questo form aggiorna direttamente il file .env persistente. Password e WSKEY restano mascherate: lascia un campo vuoto per mantenere il valore esistente.</span></div>
+      {!summary.writable && <p className="settings-notice error" role="status">Questa copia è ospitata su Sites e non dispone di un file .env persistente. Usa la pagina sul dominio valfsuite.valfservice.it per modificare i valori.</p>}
       <div className="settings-grid">
-        <label><span>Utente Alloggiati Web</span><input name="user" autoComplete="username" placeholder={summary.userHint || "Inserisci il nome utente"} required={!summary.userConfigured}/><small>{summary.userConfigured ? "Configurato" : "Obbligatorio"}</small></label>
-        <label><span>Password</span><input name="password" type="password" autoComplete="current-password" placeholder={summary.passwordConfigured ? "••••••••" : "Inserisci la password"} required={!summary.passwordConfigured}/><small>{summary.passwordConfigured ? "Configurata" : "Obbligatoria"}</small></label>
-        <label className="settings-wide"><span>WSKEY</span><input name="wsKey" type="password" autoComplete="off" placeholder={summary.wsKeyConfigured ? "••••••••" : "Incolla la WSKEY generata"} required={!summary.wsKeyConfigured}/><small>{summary.wsKeyConfigured ? "Configurata" : "Obbligatoria"}</small></label>
-        <label><span>Tipo account</span><select name="accountMode" value={mode} onChange={(event) => setMode(event.target.value as "standard" | "apartments")}><option value="standard">Struttura singola</option><option value="apartments">Gestione appartamenti</option></select></label>
-        <label><span>Codice appartamento</span><input name="apartmentId" autoComplete="off" disabled={mode !== "apartments"} required={mode === "apartments" && !summary.apartmentIdConfigured} placeholder={summary.apartmentIdHint || "Richiesto solo per account appartamenti"}/><small>{mode === "apartments" ? summary.apartmentIdConfigured ? "Configurato" : "Obbligatorio" : "Non necessario"}</small></label>
+        <label><span>Utente Alloggiati Web</span><input name="user" disabled={!summary.writable} autoComplete="username" placeholder={summary.userHint || "Inserisci il nome utente"} required={!summary.userConfigured}/><small>{summary.userConfigured ? "Configurato" : "Obbligatorio"}</small></label>
+        <label><span>Password</span><input name="password" disabled={!summary.writable} type="password" autoComplete="current-password" placeholder={summary.passwordConfigured ? "••••••••" : "Inserisci la password"} required={!summary.passwordConfigured}/><small>{summary.passwordConfigured ? "Configurata" : "Obbligatoria"}</small></label>
+        <label className="settings-wide"><span>WSKEY</span><input name="wsKey" disabled={!summary.writable} type="password" autoComplete="off" placeholder={summary.wsKeyConfigured ? "••••••••" : "Incolla la WSKEY generata"} required={!summary.wsKeyConfigured}/><small>{summary.wsKeyConfigured ? "Configurata" : "Obbligatoria"}</small></label>
+        <label><span>Tipo account</span><select name="accountMode" disabled={!summary.writable} value={mode} onChange={(event) => setMode(event.target.value as "standard" | "apartments")}><option value="standard">Struttura singola</option><option value="apartments">Gestione appartamenti</option></select></label>
+        <label><span>Codice appartamento</span><input name="apartmentId" autoComplete="off" disabled={!summary.writable || mode !== "apartments"} required={mode === "apartments" && !summary.apartmentIdConfigured} placeholder={summary.apartmentIdHint || "Richiesto solo per account appartamenti"}/><small>{mode === "apartments" ? summary.apartmentIdConfigured ? "Configurato" : "Obbligatorio" : "Non necessario"}</small></label>
       </div>
       {notice && <p className={`settings-notice ${notice.kind}`} role={notice.kind === "error" ? "alert" : "status"}>{notice.text}</p>}
-      <div className="settings-footer"><div>{summary.updatedAt && <small>Ultimo aggiornamento: {new Intl.DateTimeFormat("it-IT", { dateStyle: "medium", timeStyle: "short" }).format(new Date(summary.updatedAt))}{summary.updatedBy ? ` · ${summary.updatedBy}` : ""}</small>}</div><button type="submit" disabled={saving}>{saving ? "Salvataggio…" : "Salva impostazioni"}</button></div>
+      <div className="settings-footer"><div>{summary.updatedAt && <small>Ultimo aggiornamento: {new Intl.DateTimeFormat("it-IT", { dateStyle: "medium", timeStyle: "short" }).format(new Date(summary.updatedAt))}{summary.updatedBy ? ` · ${summary.updatedBy}` : ""}</small>}</div><button type="submit" disabled={saving || !summary.writable}>{saving ? "Salvataggio…" : "Salva impostazioni"}</button></div>
     </form>
   </section>;
 }
