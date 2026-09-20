@@ -593,8 +593,13 @@ test("prepares and audits Alloggiati Web test submissions without enabling real 
 test("publishes the supplied VALF Suite photographs in the hero and gallery", async () => {
   const [site,styles]=await Promise.all([source("app/SitePage.tsx"),source("app/globals.css")]);
   for(const image of ["_DSC4773.jpg","_DSC4776.jpg","_DSC4779.jpg","_DSC4782.jpg","_DSC4786.jpg","_DSC4789.jpg","_DSC4791.jpg","_DSC4803.jpg","_DSC4816.jpg","_DSC5885.jpg","_DSC5888.jpg"])assert.match(site,new RegExp(image.replace(".","\\.")));
-  assert.match(site,/gallery-photo/);
+  assert.match(site,/GallerySlider/);
+  assert.match(site,/gallery-arrow previous/);
+  assert.match(site,/gallery-thumbnails/);
+  assert.match(site,/ArrowLeft/);
+  assert.match(site,/ArrowRight/);
   assert.match(site,/Scopri gli ambienti interni/);
   assert.match(styles,/\.hero-art img/);
-  assert.match(styles,/\.gallery-photo img/);
+  assert.match(styles,/\.gallery-stage img/);
+  assert.match(styles,/\.gallery-thumbnails button\.active/);
 });
