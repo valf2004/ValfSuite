@@ -15,6 +15,7 @@ export type SentQuote = { id:string; requestId:string; amountCents:number; reque
 export type PaymentConfirmationInput = { requestId:string; amountCents:number; subject:string; body:string; actorEmail:string; fullyPaid:boolean; nextPaymentTokenHash?:string|null; targetStatus?:"accepted"|"checked_in"|"police_registered" };
 export type GuestCommunicationInput = { requestId:string; eventType:"balance_requested"|"checkin_invited"; subject:string; body:string; note:string; actorEmail:string; paymentTokenHash?:string|null };
 export type PaymentSubmissionInput = { id:string; quoteId:string; requestId:string; method:PaymentMethod; paidAmountCents:number; paidAt:string; paymentReference:string; message:string; receiptKey:string|null; receiptName:string|null; receiptContentType:string|null; receiptSize:number|null; createdAt:string };
+export type AlloggiatiTestAudit={requestId:string;success:boolean;validCount:number;totalCount:number;message:string;details:unknown;actorEmail:string;checkinVersion:number;apartmentId?:string};
 
 const usesPostgres=()=>Boolean(process.env["DATABASE_URL"]?.trim());
 const postgresRepository=()=>import("./availability.postgres");
@@ -89,6 +90,13 @@ export async function getCheckinSubmission(requestId:string){
   return checkinDraft(practice,guests);
 }
 
+export async function recordAlloggiatiTestResult(input:AlloggiatiTestAudit){
+  if(usesPostgres())return (await postgresRepository()).recordAlloggiatiTestResult(input);
+  const {getDb}=await import(".");const db=getDb();const createdAt=new Date().toISOString();
+  await db.update(checkinPractices).set({state:input.success?"validated":"error",lastError:input.success?null:input.message,updatedAt:createdAt}).where(and(eq(checkinPractices.requestId,input.requestId),eq(checkinPractices.version,input.checkinVersion)));
+  return recordAvailabilityEvent({requestId:input.requestId,eventType:"alloggiati_tested",actorEmail:input.actorEmail,note:input.success?`Test Alloggiati superato: ${input.validCount}/${input.totalCount} schedine valide`:`Test Alloggiati non superato: ${input.validCount}/${input.totalCount} schedine valide`,body:JSON.stringify({success:input.success,validCount:input.validCount,totalCount:input.totalCount,message:input.message,details:input.details,checkinVersion:input.checkinVersion,apartmentId:input.apartmentId||null}),createdAt});
+}
+
 export async function findActiveQuoteByTokenHash(tokenHash:string):Promise<PublicQuote|null>{
   if(usesPostgres())return (await postgresRepository()).findActiveQuoteByTokenHash(tokenHash);
   const {getDb}=await import(".");const db=getDb();const rows=await db.select({quoteId:availabilityQuotes.id,requestId:availabilityQuotes.requestId,amountCents:availabilityQuotes.amountCents,requestedPaymentCents:availabilityQuotes.requestedPaymentCents,name:availabilityRequests.name,email:availabilityRequests.email,arrivalDate:availabilityRequests.arrivalDate,departureDate:availabilityRequests.departureDate,guestCount:availabilityRequests.guestCount,language:availabilityRequests.language,status:availabilityRequests.status}).from(availabilityQuotes).innerJoin(availabilityRequests,eq(availabilityQuotes.requestId,availabilityRequests.id)).where(and(eq(availabilityQuotes.tokenHash,tokenHash),eq(availabilityQuotes.active,true))).limit(1);
@@ -124,5 +132,5 @@ export async function listAvailabilityEvents(){
 function checkinDraft(practice:typeof checkinPractices.$inferSelect,guests:Array<typeof checkinGuests.$inferSelect>){
   const values:Record<string,string>={"arrival-time":practice.arrivalTime,transport:practice.transport,"arrival-notes":practice.arrivalNotes};
   for(const guest of guests){const prefix=guest.ordinal===0?"lead":`guest-${guest.ordinal}`;values[`${prefix}-name`]=guest.firstName;values[`${prefix}-surname`]=guest.lastName;values[`${prefix}-birth`]=guest.birthDate;values[`${prefix}-sex`]=guest.sexCode;values[`${prefix}-citizenship`]=guest.citizenshipCode;values[`${prefix}-birthCountry`]=guest.birthCountryCode;if(guest.birthPlaceCode)values[`${prefix}-birthPlace`]=guest.birthPlaceCode;if(guest.documentTypeCode)values[`${prefix}-documentType`]=guest.documentTypeCode;if(guest.documentNumber)values[`${prefix}-documentNumber`]=guest.documentNumber;if(guest.issuePlaceCode)values[`${prefix}-issuePlace`]=guest.issuePlaceCode;}
-  return {state:practice.state,language:practice.language,guestCount:practice.guestCount,groupType:practice.groupType,version:practice.version,values};
+  return {state:practice.state,language:practice.language,guestCount:practice.guestCount,groupType:practice.groupType,version:practice.version,lastError:practice.lastError,values};
 }

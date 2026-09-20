@@ -374,3 +374,47 @@
   .payment-header,.payment-intro,.payment-shell { padding-left:20px; padding-right:20px; }.payment-methods,.payment-grid { grid-template-columns:1fr; }.payment-form { padding:26px 20px; }
   .calendar-toolbar { align-items:stretch; flex-direction:column; gap:14px; padding-left:18px; padding-right:18px; }.calendar-month-controls { align-self:flex-end; }.calendar-summary { align-items:flex-start; flex-direction:column; padding-left:18px; padding-right:18px; }.calendar-summary > div { justify-content:flex-start; }.calendar-filters { padding-left:18px; padding-right:18px; }.calendar-footnote { align-items:flex-start; flex-wrap:wrap; }.calendar-detail-grid { grid-template-columns:1fr; }.calendar-detail-grid div,.calendar-detail-grid div:nth-child(2n),.calendar-detail-grid div:nth-last-child(-n+2) { border-right:0; border-bottom:1px solid var(--line); }.calendar-detail-grid div:last-child { border-bottom:0; }
 }
+.alloggiati-workspace { max-width:1240px; margin:0 auto; padding:56px 32px 100px; }
+.alloggiati-title { display:flex; justify-content:space-between; gap:40px; align-items:flex-start; margin-bottom:32px; }
+.alloggiati-title h1 { font-size:clamp(42px,6vw,70px); }
+.alloggiati-title p:not(.eyebrow) { max-width:720px; color:#6e6258; font-size:17px; }
+.alloggiati-title > span { border-radius:999px; padding:10px 16px; font-size:12px; font-weight:700; white-space:nowrap; background:#efe5d8; color:#755f49; }
+.alloggiati-title > span.validated { background:#dceee8; color:#175f55; }
+.alloggiati-summary { display:grid; grid-template-columns:1.2fr 1fr .7fr; background:white; border:1px solid #e1d8ce; box-shadow:0 20px 55px rgba(61,48,37,.06); margin-bottom:28px; }
+.alloggiati-summary > div { padding:25px 28px; display:flex; flex-direction:column; border-right:1px solid #ece3d9; }
+.alloggiati-summary > div:last-child { border-right:0; }
+.alloggiati-summary small { color:#8a7460; text-transform:uppercase; letter-spacing:.12em; }
+.alloggiati-summary strong { color:#49392c; font-size:18px; margin:7px 0 2px; }
+.alloggiati-summary span { color:#76685d; font-size:13px; }
+.alloggiati-apartment { max-width:560px; margin-bottom:28px; }
+.alloggiati-apartment span { display:block; margin-top:7px; }
+.alloggiati-table-wrap { overflow:auto; background:white; border:1px solid #e1d8ce; }
+.alloggiati-table { width:100%; border-collapse:collapse; min-width:900px; }
+.alloggiati-table th,.alloggiati-table td { padding:15px 16px; border-bottom:1px solid #ece3d9; text-align:left; vertical-align:top; }
+.alloggiati-table th { color:#755f49; text-transform:uppercase; letter-spacing:.1em; font-size:11px; }
+.alloggiati-table td { font-size:14px; color:#49392c; }
+.alloggiati-table code { color:#176c63; font-weight:700; }
+.alloggiati-records { margin-top:18px; border:1px solid #ddd1c4; background:#f2eadf; padding:16px 20px; }
+.alloggiati-records summary { cursor:pointer; color:#49392c; font-weight:700; }
+.alloggiati-records pre { white-space:pre; overflow:auto; background:#302921; color:#f7f2ea; padding:16px; font-size:11px; }
+.alloggiati-records pre span { display:block; color:#b5d8d4; margin-bottom:8px; }
+.alloggiati-notice,.alloggiati-result { margin-top:24px; padding:20px 22px; border-radius:8px; display:flex; flex-direction:column; gap:5px; }
+.alloggiati-notice.warning { background:#fff3d6; color:#71551a; }
+.alloggiati-result.success { background:#dceee8; color:#175f55; }
+.alloggiati-result.error { background:#f7dfdc; color:#872f27; }
+.alloggiati-result p { margin:0; }
+.alloggiati-actions { display:flex; align-items:center; flex-wrap:wrap; gap:14px; margin-top:30px; }
+.alloggiati-actions > a { color:#176c63; text-underline-offset:4px; margin-right:8px; }
+.alloggiati-actions button:last-child { border:1px solid #cabaaa; background:#eee6dd; color:#8d7e70; border-radius:999px; padding:14px 20px; }
+.alloggiati-unavailable { max-width:760px; margin:70px auto; padding:45px; background:white; box-shadow:0 20px 60px rgba(61,48,37,.08); }
+.alloggiati-unavailable h1 { font-size:52px; }
+.alloggiati-test-action { border-color:#176c63!important; color:#176c63!important; font-weight:700!important; }
+@media (max-width:760px) {
+  .alloggiati-workspace { padding:38px 18px 75px; }
+  .alloggiati-title { flex-direction:column; gap:12px; }
+  .alloggiati-summary { grid-template-columns:1fr; }
+  .alloggiati-summary > div { border-right:0; border-bottom:1px solid #ece3d9; }
+  .alloggiati-summary > div:last-child { border-bottom:0; }
+  .alloggiati-actions { align-items:stretch; flex-direction:column; }
+  .alloggiati-actions > * { width:100%; text-align:center; }
+}

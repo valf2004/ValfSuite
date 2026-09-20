@@ -553,3 +553,40 @@ test("imports and applies the official Alloggiati reference tables", async () =>
   assert.match(migration,/metadata_json/);
   assert.match(migration,/synced_at/);
 });
+
+test("prepares and audits Alloggiati Web test submissions without enabling real sends", async () => {
+  const [dashboard,page,form,route,records,client,repository,postgres,schema]=await Promise.all([
+    source("app/area-privata/RequestsDashboard.tsx"),
+    source("app/area-riservata/alloggiati/[id]/page.tsx"),
+    source("app/area-privata/AlloggiatiTestForm.tsx"),
+    source("app/api/gestione/alloggiati/test/[id]/route.ts"),
+    source("app/lib/alloggiati-record.ts"),
+    source("app/lib/alloggiati-client.ts"),
+    source("db/availability.ts"),
+    source("db/availability.postgres.ts"),
+    source("db/schema.ts"),
+  ]);
+  assert.match(dashboard,/Prepara Alloggiati/);
+  assert.match(page,/buildAlloggiatiRecords/);
+  assert.match(form,/Invia test/);
+  assert.match(form,/Invio reale · non attivo/);
+  assert.match(form,/disabled title=/);
+  assert.match(route,/privateUserFromCookie/);
+  assert.match(route,/item\.status!=="checked_in"/);
+  assert.match(records,/record\.length!==168/);
+  assert.match(records,/Massimo 30|da 1 a 30 giorni/);
+  assert.match(client,/GestioneAppartamenti_Test/);
+  assert.match(client,/AlloggiatiService\/\$\{action\}/);
+  assert.match(repository,/recordAlloggiatiTestResult/);
+  assert.match(postgres,/recordAlloggiatiTestResult/);
+  assert.match(schema,/alloggiati_tested/);
+});
+
+test("publishes the supplied VALF Suite photographs in the hero and gallery", async () => {
+  const [site,styles]=await Promise.all([source("app/SitePage.tsx"),source("app/globals.css")]);
+  for(const image of ["_DSC4773.jpg","_DSC4776.jpg","_DSC4779.jpg","_DSC4782.jpg","_DSC4786.jpg","_DSC4789.jpg","_DSC4791.jpg","_DSC4803.jpg","_DSC4816.jpg","_DSC5885.jpg","_DSC5888.jpg"])assert.match(site,new RegExp(image.replace(".","\\.")));
+  assert.match(site,/gallery-photo/);
+  assert.match(site,/Scopri gli ambienti interni/);
+  assert.match(styles,/\.hero-art img/);
+  assert.match(styles,/\.gallery-photo img/);
+});

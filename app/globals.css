@@ -27,7 +27,9 @@ h3 { font-size:28px; }
 .button { display:inline-flex; align-items:center; justify-content:center; border:0; border-radius:999px; padding:15px 25px; background:var(--sea); color:white; text-decoration:none; font:600 14px 'DM Sans',sans-serif; cursor:pointer; }
 .button:hover { background:var(--sea-dark); }
 .text-link { color:var(--brown); text-underline-offset:6px; font-size:14px; }
-.hero-art { aspect-ratio:.83; max-height:590px; background:linear-gradient(145deg,#ece1d3,#d8c6b1); position:relative; overflow:hidden; border-radius:220px 220px 20px 20px; display:flex; align-items:center; justify-content:center; text-align:center; color:rgba(74,58,44,.55); font-family:'Cormorant Garamond',serif; font-size:20px; }
+.hero-art { aspect-ratio:.83; max-height:590px; margin:0; background:linear-gradient(145deg,#ece1d3,#d8c6b1); position:relative; overflow:hidden; border-radius:220px 220px 20px 20px; }
+.hero-art img { width:100%; height:100%; display:block; object-fit:cover; }
+.hero-art figcaption { position:absolute; left:24px; bottom:22px; z-index:2; background:rgba(247,242,234,.88); padding:10px 17px; border-radius:99px; color:var(--brown); font-family:'Cormorant Garamond',serif; font-size:18px; }
 .sun { position:absolute; width:170px; height:170px; border-radius:50%; background:rgba(247,242,234,.55); top:65px; right:60px; }
 .coast { position:absolute; width:140%; height:42%; border-radius:50%; transform:rotate(-8deg); bottom:-12%; left:-20%; background:var(--sea); opacity:.9; }
 .coast-two { bottom:-27%; left:12%; background:var(--brown); opacity:.9; transform:rotate(9deg); }
@@ -104,8 +106,11 @@ footer small { text-align:right; opacity:.65; }
 .amenities span { color:var(--taupe); font-size:10px; }
 .amenities h3 { font-size:25px; }
 .notice { margin-top:40px; padding:22px; background:var(--sand); color:var(--brown); }
-.gallery-grid { display:grid; grid-template-columns:repeat(2,1fr); grid-auto-rows:310px; gap:20px; }
+.gallery-grid { display:grid; grid-template-columns:repeat(2,1fr); grid-auto-rows:310px; grid-auto-flow:dense; gap:20px; }
 .gallery-grid .wide { grid-column:1/-1; }
+.gallery-photo { margin:0; overflow:hidden; background:var(--sand); }
+.gallery-photo img { width:100%; height:100%; display:block; object-fit:cover; transition:transform .35s ease; }
+.gallery-photo:hover img { transform:scale(1.015); }
 .places-list article { display:grid; grid-template-columns:260px 70px 1fr; border-top:1px solid var(--line); padding:28px 0; align-items:start; }
 .places-list img { width:230px; height:150px; object-fit:cover; border-radius:8px; }
 .places-list > article > span { color:var(--taupe); font-size:11px; }

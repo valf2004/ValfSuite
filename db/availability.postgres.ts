@@ -23,6 +23,7 @@ export type PaymentSubmissionInput = {
   paymentReference:string; message:string; receiptKey:string|null; receiptName:string|null;
   receiptContentType:string|null; receiptSize:number|null; createdAt:string;
 };
+export type AlloggiatiTestAudit={requestId:string;success:boolean;validCount:number;totalCount:number;message:string;details:unknown;actorEmail:string;checkinVersion:number;apartmentId?:string};
 
 const url = process.env["DATABASE_URL"];
 if (!url) throw new Error("DATABASE_URL is required in the Docker runtime");
@@ -104,7 +105,13 @@ export async function getCheckinSubmission(requestId:string){
   await ready();const practices=await sql`SELECT * FROM checkin_practices WHERE request_id=${requestId} LIMIT 1`;const practice=practices[0];if(!practice)return null;
   const guests=await sql`SELECT * FROM checkin_guests WHERE request_id=${requestId} ORDER BY ordinal`;const values:Record<string,string>={"arrival-time":String(practice.arrival_time),transport:String(practice.transport),"arrival-notes":String(practice.arrival_notes||"")};
   for(const guest of guests){const ordinal=Number(guest.ordinal);const prefix=ordinal===0?"lead":`guest-${ordinal}`;values[`${prefix}-name`]=String(guest.first_name);values[`${prefix}-surname`]=String(guest.last_name);values[`${prefix}-birth`]=dateValue(guest.birth_date);values[`${prefix}-sex`]=String(guest.sex_code);values[`${prefix}-citizenship`]=String(guest.citizenship_code);values[`${prefix}-birthCountry`]=String(guest.birth_country_code);if(guest.birth_place_code!=null)values[`${prefix}-birthPlace`]=String(guest.birth_place_code);if(guest.document_type_code!=null)values[`${prefix}-documentType`]=String(guest.document_type_code);if(guest.document_number!=null)values[`${prefix}-documentNumber`]=String(guest.document_number);if(guest.issue_place_code!=null)values[`${prefix}-issuePlace`]=String(guest.issue_place_code);}
-  return {state:String(practice.state),language:String(practice.language),guestCount:Number(practice.guest_count),groupType:String(practice.group_type),version:Number(practice.version),values};
+  return {state:String(practice.state),language:String(practice.language),guestCount:Number(practice.guest_count),groupType:String(practice.group_type),version:Number(practice.version),lastError:practice.last_error==null?null:String(practice.last_error),values};
+}
+
+export async function recordAlloggiatiTestResult(input:AlloggiatiTestAudit){
+  await ready();const createdAt=new Date().toISOString();
+  await sql`UPDATE checkin_practices SET state=${input.success?"validated":"error"},last_error=${input.success?null:input.message},updated_at=${createdAt} WHERE request_id=${input.requestId} AND version=${input.checkinVersion}`;
+  return insertEvent({requestId:input.requestId,eventType:"alloggiati_tested",actorEmail:input.actorEmail,note:input.success?`Test Alloggiati superato: ${input.validCount}/${input.totalCount} schedine valide`:`Test Alloggiati non superato: ${input.validCount}/${input.totalCount} schedine valide`,body:JSON.stringify({success:input.success,validCount:input.validCount,totalCount:input.totalCount,message:input.message,details:input.details,checkinVersion:input.checkinVersion,apartmentId:input.apartmentId||null}),createdAt});
 }
 
 export async function findActiveQuoteByTokenHash(tokenHash:string):Promise<PublicQuote|null> {

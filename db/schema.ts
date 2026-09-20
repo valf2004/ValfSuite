@@ -92,7 +92,7 @@ export const checkinGuests = sqliteTable("checkin_guests", {
 export const availabilityEvents = sqliteTable("availability_events", {
   id: text("id").primaryKey(),
   requestId: text("request_id").notNull().references(() => availabilityRequests.id, { onDelete: "cascade" }),
-  eventType: text("event_type", { enum: ["request_created", "related_request_created", "email_sent", "payment_reported", "payment_confirmed", "balance_requested", "checkin_invited", "checkin_submitted", "checkin_updated", "status_changed"] }).notNull(),
+  eventType: text("event_type", { enum: ["request_created", "related_request_created", "email_sent", "payment_reported", "payment_confirmed", "balance_requested", "checkin_invited", "checkin_submitted", "checkin_updated", "alloggiati_tested", "status_changed"] }).notNull(),
   fromStatus: text("from_status"),
   toStatus: text("to_status"),
   actorEmail: text("actor_email"),
