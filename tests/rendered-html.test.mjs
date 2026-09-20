@@ -29,14 +29,22 @@ test("declares all public languages and pages", async () => {
 });
 
 test("keeps the reserved area private and OAuth sessions compatible", async () => {
-  const [reservedArea, callback, gitignore] = await Promise.all([
+  const [reservedArea, privatePage, privateChrome, sitePage, callback, gitignore] = await Promise.all([
     source("app/area-riservata/page.tsx"),
+    source("app/area-privata/page.tsx"),
+    source("app/area-privata/PrivateChrome.tsx"),
+    source("app/SitePage.tsx"),
     source("app/api/auth/google/callback/route.ts"),
     source(".gitignore"),
   ]);
 
   assert.match(reservedArea, /index:\s*false/);
+  assert.match(sitePage, /https:\/\/valfsuite\.valfservice\.it\/area-riservata/);
+  assert.match(privatePage, /host\.endsWith\("\.chatgpt\.site"\)/);
+  assert.match(privatePage, /query\.errore/);
+  assert.match(privateChrome, /Account non autorizzato/);
   assert.match(callback, /authCookies\.session, session, 8 \* 60 \* 60, "Lax"/);
+  assert.match(callback, /google_auth_callback_failed/);
   assert.match(gitignore, /^\.env\*/m);
   assert.match(gitignore, /^!\.env\.example$/m);
 });

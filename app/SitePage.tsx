@@ -1,7 +1,6 @@
 "use client";
 
 import { FormEvent, useState } from "react";
-import Link from "next/link";
 
 type Lang = "it" | "en" | "fr" | "es" | "de";
 
@@ -18,6 +17,7 @@ const suitePhotos=["/images/valf-suite/_DSC4773.jpg","/images/valf-suite/_DSC477
 const portraitPhotos=new Set([2,3,5,8,9]);
 const galleryIntro:Record<Lang,string>={it:"Scopri gli ambienti interni, i dettagli e l’area esterna di VALF Suite.",en:"Discover the interiors, details and outdoor area of VALF Suite.",fr:"Découvrez les espaces intérieurs, les détails et l’extérieur de VALF Suite.",es:"Descubre los interiores, los detalles y la zona exterior de VALF Suite.",de:"Entdecken Sie die Innenräume, Details und den Außenbereich der VALF Suite."};
 const reservedAreaLabels: Record<Lang,string> = { it:"Area riservata", en:"Reserved area", fr:"Espace réservé", es:"Área reservada", de:"Geschützter Bereich" };
+const privateAreaUrl="https://valfsuite.valfservice.it/area-riservata";
 const serviceItems:Record<Lang,string[]> = {
   it:["Wi‑Fi gratuito","Climatizzatore caldo/freddo","Angolo cottura attrezzato","TV","Parcheggio privato","Area esterna privata","Piano terra","Biancheria e asciugamani inclusi"],
   en:["Free Wi‑Fi","Heating and air conditioning","Equipped kitchenette","TV","Private parking","Private outdoor area","Ground floor","Bed linen and towels included"],
@@ -61,7 +61,7 @@ export function SitePage({ lang: langValue, page }: { lang: string; page: string
     {page==="prenota" && <Info title={t.bookTitle as string} eyebrow={(t.nav as string[])[4]} intro={t.bookText as string}><Availability onSubmit={submit} t={t} status={status} labels={labels[lang].form}/></Info>}
     {page==="contatti" && <Info title={t.contactsTitle as string} eyebrow={(t.nav as string[])[5]} intro={t.contactsText as string}><div className="contact-card"><p><small>{labels[lang].contact[0]}</small><strong>Angela</strong></p><p><small>{labels[lang].contact[1]}</small><a className="contact-link" href="tel:+393403726198">+39 340 372 6198</a></p><p><small>{labels[lang].contact[2]}</small><a className="contact-link" href="mailto:valfsuite@gmail.com">valfsuite@gmail.com</a></p><p><small>{labels[lang].contact[3]}</small><span>Via Aurelia Nord 97, 19021 Arcola (SP)</span></p></div></Info>}
     {page==="condizioni" && <Info title={t.termsTitle as string} eyebrow="VALF Suite" intro=""><div className="terms">{labels[lang].terms.map(([h,p])=><section key={h}><h3>{h}</h3><p>{p}</p></section>)}</div></Info>}
-    <footer><a className="brand footer-brand" href={base||"/"}><img src="/logo-valf-suite.png" alt="VALF Suite"/></a><p>Via Aurelia Nord 97 · Arcola (SP)</p><div><a href={href("condizioni")}>{t.termsTitle as string}</a><a href={href("contatti")}>{t.contactsTitle as string}</a><Link href="/area-riservata" rel="nofollow">{reservedAreaLabels[lang]}</Link></div><small>© {new Date().getFullYear()} VALF Suite</small></footer>
+    <footer><a className="brand footer-brand" href={base||"/"}><img src="/logo-valf-suite.png" alt="VALF Suite"/></a><p>Via Aurelia Nord 97 · Arcola (SP)</p><div><a href={href("condizioni")}>{t.termsTitle as string}</a><a href={href("contatti")}>{t.contactsTitle as string}</a><a href={privateAreaUrl} rel="nofollow">{reservedAreaLabels[lang]}</a></div><small>© {new Date().getFullYear()} VALF Suite</small></footer>
   </main>
 }
 

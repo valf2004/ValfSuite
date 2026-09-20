@@ -1,5 +1,15 @@
-export function PrivateLogin({configured,sessionExpired=false}:{configured:boolean;sessionExpired?:boolean}) {
-  return <main className="private-login"><header><a href="/"><img src="/logo-valf-suite.png" alt="VALF Suite"/></a></header><section><p className="eyebrow">Accesso riservato</p><h1>Area riservata</h1>{sessionExpired&&<p className="private-session-expired" role="alert"><strong>La sessione è scaduta.</strong><span>Accedi nuovamente per continuare.</span></p>}<p>Gestione dei check-in e delle comunicazioni degli ospiti. L’accesso è consentito esclusivamente agli account autorizzati.</p>{configured ? <a className="google-login" href="/api/auth/google/start"><span>G</span>Continua con Google</a> : <div className="private-config"><strong>Configurazione in corso</strong><p>Il collegamento con Google non è ancora attivo. Inserisci Client ID e Client Secret sulla VM per completare l’attivazione.</p></div>}<small>VALF Suite non riceve né conserva la password del tuo account Google.</small></section></main>;
+const loginErrors:Record<string,{title:string;detail:string}>={
+  configurazione:{title:"Accesso non configurato.",detail:"Controlla i parametri Google dell’area riservata."},
+  accesso_annullato:{title:"Accesso annullato.",detail:"Puoi riprovare scegliendo il tuo account Google."},
+  sessione_scaduta:{title:"Richiesta scaduta.",detail:"Avvia nuovamente l’accesso con Google."},
+  google:{title:"Google non ha completato l’accesso.",detail:"Riprova tra poco oppure scegli nuovamente l’account."},
+  non_autorizzato:{title:"Account non autorizzato.",detail:"Usa uno degli account abilitati per VALF Suite."},
+  verifica:{title:"Non è stato possibile verificare l’account.",detail:"Riprova; se il problema continua, comunica questo messaggio all’assistenza."},
+};
+
+export function PrivateLogin({configured,sessionExpired=false,loginError}:{configured:boolean;sessionExpired?:boolean;loginError?:string}) {
+  const error=loginError?loginErrors[loginError]:undefined;
+  return <main className="private-login"><header><a href="/"><img src="/logo-valf-suite.png" alt="VALF Suite"/></a></header><section><p className="eyebrow">Accesso riservato</p><h1>Area riservata</h1>{sessionExpired&&<p className="private-session-expired" role="alert"><strong>La sessione è scaduta.</strong><span>Accedi nuovamente per continuare.</span></p>}{error&&<p className="private-session-expired" role="alert"><strong>{error.title}</strong><span>{error.detail}</span></p>}<p>Gestione dei check-in e delle comunicazioni degli ospiti. L’accesso è consentito esclusivamente agli account autorizzati.</p>{configured ? <a className="google-login" href="/api/auth/google/start"><span>G</span>Continua con Google</a> : <div className="private-config"><strong>Configurazione in corso</strong><p>Il collegamento con Google non è ancora attivo. Inserisci Client ID e Client Secret sulla VM per completare l’attivazione.</p></div>}<small>VALF Suite non riceve né conserva la password del tuo account Google.</small></section></main>;
 }
 
 export function PrivateHeader({user,active}:{user:{email:string;name:string;picture?:string};active:"requests"|"calendar"|"database"|"settings"}) {

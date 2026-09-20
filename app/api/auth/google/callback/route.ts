@@ -31,6 +31,7 @@ export async function GET(request: Request) {
     headers.append("Set-Cookie", cookie(authCookies.verifier, "", 0));
     return new Response(null, { status: 302, headers });
   } catch (error) {
+    console.error("google_auth_callback_failed", error instanceof Error ? error.message : "unknown");
     return failure(error instanceof Error && error.message === "Account not authorized" ? "non_autorizzato" : "verifica");
   }
 }
