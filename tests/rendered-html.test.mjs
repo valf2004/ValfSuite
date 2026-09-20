@@ -594,12 +594,16 @@ test("publishes the supplied VALF Suite photographs in the hero and gallery", as
   const [site,styles]=await Promise.all([source("app/SitePage.tsx"),source("app/globals.css")]);
   for(const image of ["_DSC4773.jpg","_DSC4776.jpg","_DSC4779.jpg","_DSC4782.jpg","_DSC4786.jpg","_DSC4789.jpg","_DSC4791.jpg","_DSC4803.jpg","_DSC4816.jpg","_DSC5885.jpg","_DSC5888.jpg"])assert.match(site,new RegExp(image.replace(".","\\.")));
   assert.match(site,/GallerySlider/);
+  assert.match(site,/GalleryPage/);
+  assert.match(site,/gallery-page/);
   assert.match(site,/gallery-arrow previous/);
   assert.match(site,/gallery-thumbnails/);
   assert.match(site,/ArrowLeft/);
   assert.match(site,/ArrowRight/);
   assert.match(site,/Scopri gli ambienti interni/);
+  assert.doesNotMatch(site,/<span>0\{i\+1\}<\/span>/);
   assert.match(styles,/\.hero-art img/);
+  assert.match(styles,/height:clamp\(410px,calc\(100vh - 330px\),650px\)/);
   assert.match(styles,/\.gallery-stage img/);
   assert.match(styles,/\.gallery-thumbnails button\.active/);
 });
