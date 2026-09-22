@@ -600,10 +600,11 @@ test("publishes the supplied VALF Suite photographs in the hero and gallery", as
   assert.match(site,/gallery-thumbnails/);
   assert.match(site,/ArrowLeft/);
   assert.match(site,/ArrowRight/);
-  assert.match(site,/Scopri gli ambienti interni/);
+  assert.doesNotMatch(site,/Scopri gli ambienti interni/);
   assert.doesNotMatch(site,/<span>0\{i\+1\}<\/span>/);
   assert.match(styles,/\.hero-art img/);
-  assert.match(styles,/height:clamp\(410px,calc\(100vh - 330px\),650px\)/);
+  assert.match(styles,/white-space:nowrap/);
+  assert.match(styles,/height:clamp\(430px,calc\(100vh - 255px\),700px\)/);
   assert.match(styles,/\.gallery-stage img/);
   assert.match(styles,/\.gallery-thumbnails button\.active/);
 });
