@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
+import {buildRoss1000Xml,validateRoss1000Xml} from "../app/lib/ross1000-xml.mjs";
 
 const root = new URL("../", import.meta.url);
 const source = (path) => readFile(new URL(path, root), "utf8");
@@ -588,6 +589,30 @@ test("prepares and audits Alloggiati Web test submissions without enabling real 
   assert.match(repository,/recordAlloggiatiTestResult/);
   assert.match(postgres,/recordAlloggiatiTestResult/);
   assert.match(schema,/alloggiati_tested/);
+});
+
+test("produces a locally validated Ross1000 arrival XML without enabling automatic sends", async () => {
+  const draft={guestCount:2,groupType:"family",values:{tourismType:"BALNEARE",transport:"AUTO","lead-name":"Mario","lead-surname":"Rossi","lead-sex":"1","lead-birth":"1980-04-03","lead-citizenship":"100000100","lead-birthCountry":"100000100","lead-birthPlace":"403015146","lead-residenceCountry":"100000100","lead-residencePlace":"403015146","guest-1-name":"Anna","guest-1-surname":"Rossi","guest-1-sex":"2","guest-1-birth":"1982-05-06","guest-1-citizenship":"100000100","guest-1-birthCountry":"100000100","guest-1-birthPlace":"403015146","guest-1-residenceCountry":"100000100","guest-1-residencePlace":"403015146"}};
+  const result=buildRoss1000Xml({requestId:"4e40eabb-8e62-49ff-a121-123456789abc",arrivalDate:"2026-09-30",draft});
+  assert.equal(result.validation.valid,true);
+  assert.equal(result.arrivals.length,2);
+  assert.match(result.xml,/<codice>L12648<\/codice>/);
+  assert.match(result.xml,/<data>20260930<\/data>/);
+  assert.match(result.xml,/<cameredisponibili>1<\/cameredisponibili>/);
+  assert.match(result.xml,/<lettidisponibili>4<\/lettidisponibili>/);
+  assert.match(result.xml,/<tipoalloggiato>17<\/tipoalloggiato>/);
+  assert.match(result.xml,/<tipoalloggiato>19<\/tipoalloggiato>/);
+  assert.match(result.xml,/<tipoturismo>BALNEARE<\/tipoturismo>/);
+  assert.equal(validateRoss1000Xml(result.xml).valid,true);
+  const [page,route,form,schema,migration]=await Promise.all([source("app/area-riservata/ross1000/[id]/page.tsx"),source("app/api/gestione/ross1000/xml/[id]/route.ts"),source("app/checkin/GuestCheckin.tsx"),source("db/schema.ts"),source("drizzle/0012_noisy_mattie_franklin.sql")]);
+  assert.match(page,/Importa file gestionale/);
+  assert.match(page,/Invio automatico · non attivo/);
+  assert.match(route,/application\/xml/);
+  assert.match(route,/privateUserFromCookie/);
+  assert.match(form,/residenceCountry/);
+  assert.match(form,/tourismType/);
+  assert.match(schema,/residenceCountryCode/);
+  assert.match(migration,/tourism_type/);
 });
 
 test("publishes the supplied VALF Suite photographs in the hero and gallery", async () => {

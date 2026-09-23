@@ -409,6 +409,14 @@
 .alloggiati-unavailable { max-width:760px; margin:70px auto; padding:45px; background:white; box-shadow:0 20px 60px rgba(61,48,37,.08); }
 .alloggiati-unavailable h1 { font-size:52px; }
 .alloggiati-test-action { border-color:#176c63!important; color:#176c63!important; font-weight:700!important; }
+.ross1000-export-action { border-color:#9a6840!important; color:#805332!important; font-weight:700!important; }
+.ross-validation { background:#f7f2eb; border:1px solid #ded1c3; padding:24px 28px; margin:0 0 24px; }
+.ross-validation h2 { margin:0 0 16px; color:#49392c; }
+.ross-validation > div { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px 22px; margin-bottom:14px; }
+.ross-validation p { margin:0; display:flex; gap:9px; align-items:center; color:#315b50; font-weight:700; }
+.ross-validation p span { display:grid; place-items:center; width:22px; height:22px; border-radius:50%; background:#dceee8; }
+.ross-validation small { color:#76685d; line-height:1.5; }
+.ross-xml pre { max-height:460px; overflow:auto; white-space:pre; }
 @media (max-width:760px) {
   .alloggiati-workspace { padding:38px 18px 75px; }
   .alloggiati-title { flex-direction:column; gap:12px; }
@@ -417,4 +425,5 @@
   .alloggiati-summary > div:last-child { border-bottom:0; }
   .alloggiati-actions { align-items:stretch; flex-direction:column; }
   .alloggiati-actions > * { width:100%; text-align:center; }
+  .ross-validation > div { grid-template-columns:1fr; }
 }
