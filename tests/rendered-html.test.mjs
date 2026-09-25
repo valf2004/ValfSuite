@@ -12,7 +12,7 @@ test("contains the VALF Suite production metadata", async () => {
     source("package.json"),
   ]);
 
-  assert.match(layout, /VALF Suite \| Casa vacanze ad Arcola/);
+  assert.match(layout, /VALF Suite \| Appartamento indipendente ad Arcola/);
   assert.match(layout, /https:\/\/valfsuite\.valfservice\.it/);
   assert.doesNotMatch(layout, /Starter Project|codex-preview/);
   assert.equal(JSON.parse(packageJson).name, "valfsuite");
@@ -632,4 +632,18 @@ test("publishes the supplied VALF Suite photographs in the hero and gallery", as
   assert.match(styles,/height:clamp\(430px,calc\(100vh - 255px\),700px\)/);
   assert.match(styles,/\.gallery-stage img/);
   assert.match(styles,/\.gallery-thumbnails button\.active/);
+});
+
+test("presents the apartment clearly and publishes its registration codes", async () => {
+  const [site,layout]=await Promise.all([source("app/SitePage.tsx"),source("app/layout.tsx")]);
+  assert.match(site,/homeHeroPhoto="\/images\/valf-suite\/_DSC4803\.jpg"/);
+  assert.match(site,/Scrivici su WhatsApp/);
+  assert.match(site,/Ingresso indipendente/);
+  assert.match(site,/Parcheggio privato/);
+  assert.match(site,/Un appartamento indipendente fino a 4 ospiti/);
+  assert.match(site,/cucina completa e completamente attrezzata/);
+  assert.match(site,/CIN IT011002C2FW233HQM/);
+  assert.match(site,/CITRA 011002-LT-0278/);
+  assert.doesNotMatch(site,/Casa vacanze|casa vacanze|holiday home|maison de vacances|casa de vacaciones|Ferienhaus|monolocale|studio indipendente/i);
+  assert.doesNotMatch(layout,/Casa vacanze/i);
 });

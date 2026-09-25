@@ -3,8 +3,8 @@ import "./globals.css";
 import "./checkin.css";
 
 export const metadata: Metadata = {
-  title: "VALF Suite | Casa vacanze ad Arcola, Liguria",
-  description: "VALF Suite è una casa vacanze indipendente ad Arcola, base ideale per scoprire Cinque Terre, Golfo dei Poeti, Lunigiana e Toscana.",
+  title: "VALF Suite | Appartamento indipendente ad Arcola",
+  description: "VALF Suite è un appartamento indipendente ad uso turistico ad Arcola, con parcheggio privato: una base comoda per il Golfo dei Poeti e le Cinque Terre.",
   metadataBase: new URL("https://valfsuite.valfservice.it"),
   openGraph: {
     title: "VALF Suite | Arcola · Liguria",
@@ -15,7 +15,7 @@ export const metadata: Metadata = {
     type: "website",
     images: [{ url: "/og.png", width: 1536, height: 1024, alt: "VALF Suite, Arcola Liguria" }],
   },
-  twitter: { card: "summary_large_image", title: "VALF Suite", description: "Casa vacanze ad Arcola, tra Liguria e Toscana.", images: ["/og.png"] },
+  twitter: { card: "summary_large_image", title: "VALF Suite", description: "Appartamento indipendente ad Arcola, tra Liguria e Toscana.", images: ["/og.png"] },
   icons: {
     icon: [
       { url: "/favicon-32.png", sizes: "32x32", type: "image/png" },
