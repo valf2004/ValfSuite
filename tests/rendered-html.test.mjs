@@ -648,14 +648,21 @@ test("presents the apartment clearly and publishes its registration codes", asyn
   assert.doesNotMatch(layout,/Casa vacanze/i);
 });
 
-test("links every language to its matching guest guide", async () => {
-  const site=await source("app/SitePage.tsx");
-  for (const language of ["IT","EN","FR","ES","DE"]) {
-    assert.match(site,new RegExp(`/documenti/VALF_Suite_Guida_Ospiti_${language}\\.pdf`));
-  }
-  for (const label of ["Guida ospiti","Guest guide","Guide d’accueil","Guía para huéspedes","Gästehandbuch"]) {
-    assert.match(site,new RegExp(label));
-  }
-  assert.match(site,/guestGuideUrls\[lang\]/);
-  assert.match(site,/target="_blank"/);
+test("keeps guest guides behind the operator login", async () => {
+  const [site,privateChrome,documents,downloadRoute,compose]=await Promise.all([
+    source("app/SitePage.tsx"),
+    source("app/area-privata/PrivateChrome.tsx"),
+    source("app/area-riservata/documenti/page.tsx"),
+    source("app/api/gestione/guide-ospiti/[lang]/route.ts"),
+    source("docker-compose.yml"),
+  ]);
+  assert.doesNotMatch(site,/Guida ospiti|Guest guide|VALF_Suite_Guida_Ospiti/);
+  assert.match(privateChrome,/\/area-riservata\/documenti/);
+  for (const language of ["it","en","fr","es","de"]) assert.match(documents,new RegExp(`code:"${language}"`));
+  for (const language of ["IT","EN","FR","ES","DE"]) assert.match(downloadRoute,new RegExp(`VALF_Suite_Guida_Ospiti_${language}\\.pdf`));
+  assert.match(downloadRoute,/privateUserFromCookie/);
+  assert.match(downloadRoute,/status:303/);
+  assert.match(downloadRoute,/Cache-Control":"private, no-store/);
+  assert.match(downloadRoute,/GUEST_GUIDES_DIR/);
+  assert.match(compose,/GUEST_GUIDES_DIR: \/app\/private-guides/);
 });
