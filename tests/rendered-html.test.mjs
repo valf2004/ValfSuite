@@ -212,7 +212,8 @@ test("shows overlapping requests in a protected booking calendar", async () => {
   for(const status of ["quote_requested","quote_sent","accepted","checked_in","police_registered","archived"])assert.match(calendar,new RegExp(status));
   assert.match(styles,/booking-calendar/);
   assert.match(styles,/calendar-event\.tentative/);
-  assert.match(statusRoute,/target\.arrivalDate<item\.departureDate&&target\.departureDate>item\.arrivalDate/);
+  assert.match(statusRoute,/arrivalDate<item\.departureDate&&departureDate>item\.arrivalDate/);
+  assert.match(statusRoute,/findConflicts\(rows,target\.arrivalDate,target\.departureDate,target\.id\)/);
   assert.match(statusRoute,/data\.force!==true/);
   assert.match(statusRoute,/Sovrapposizione confermata manualmente/);
 });
@@ -339,7 +340,7 @@ test("returns expired private sessions to the login page", async () => {
     source("app/api/gestione/ricevute/[id]/route.ts"),
     source("app/checkin.css"),
   ]);
-  assert.equal((dashboard.match(/authenticatedFetch\(/g)||[]).length,5);
+  assert.equal((dashboard.match(/authenticatedFetch\(/g)||[]).length,6);
   assert.match(authenticatedFetch,/response\.status !== 401/);
   assert.match(authenticatedFetch,/window\.location\.replace/);
   assert.match(authenticatedFetch,/sessione", "scaduta"/);
@@ -375,6 +376,29 @@ test("creates linked practices without changing accepted bookings", async () => 
   assert.match(postgres,/source_request_id,relation_reason/);
   assert.match(migration,/source_request_id/);
   assert.match(migration,/relation_reason/);
+});
+
+test("creates direct stays without a booking workflow", async () => {
+  const [route,dashboard,styles] = await Promise.all([
+    source("app/api/gestione/richieste/route.ts"),
+    source("app/area-privata/RequestsDashboard.tsx"),
+    source("app/checkin.css"),
+  ]);
+  assert.match(route,/data\?\.mode==="direct"/);
+  assert.match(route,/status:"accepted"/);
+  assert.match(route,/sourceRequestId:null,relationReason:"new_stay"/);
+  assert.match(route,/findConflicts\(rows,data\.arrivalDate,data\.departureDate\)/);
+  assert.match(route,/data\.force!==true/);
+  assert.match(route,/Soggiorno diretto inserito dall’operatore/);
+  assert.match(dashboard,/\+ Nuovo soggiorno diretto/);
+  assert.match(dashboard,/mode:"direct"/);
+  assert.match(dashboard,/E-mail facoltativa/);
+  assert.match(dashboard,/Crea comunque/);
+  assert.match(dashboard,/setActive\("accepted"\)/);
+  assert.match(dashboard,/Boolean\(item\.email\).*Invita al check-in/);
+  assert.match(dashboard,/isDirectStay\(item\)/);
+  assert.match(styles,/\.requests-toolbar/);
+  assert.match(styles,/\.direct-stay-modal/);
 });
 
 
