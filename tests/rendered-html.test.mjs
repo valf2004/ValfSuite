@@ -647,3 +647,15 @@ test("presents the apartment clearly and publishes its registration codes", asyn
   assert.doesNotMatch(site,/Casa vacanze|casa vacanze|holiday home|maison de vacances|casa de vacaciones|Ferienhaus|monolocale|studio indipendente/i);
   assert.doesNotMatch(layout,/Casa vacanze/i);
 });
+
+test("links every language to its matching guest guide", async () => {
+  const site=await source("app/SitePage.tsx");
+  for (const language of ["IT","EN","FR","ES","DE"]) {
+    assert.match(site,new RegExp(`/documenti/VALF_Suite_Guida_Ospiti_${language}\\.pdf`));
+  }
+  for (const label of ["Guida ospiti","Guest guide","Guide d’accueil","Guía para huéspedes","Gästehandbuch"]) {
+    assert.match(site,new RegExp(label));
+  }
+  assert.match(site,/guestGuideUrls\[lang\]/);
+  assert.match(site,/target="_blank"/);
+});
