@@ -34,16 +34,21 @@ export function validateCheckinLookupCodes(submission:CheckinSubmissionRecord,lo
   const countries=new Set(lookups.filter(row=>row.tableName==="Luoghi"&&Object.values(row.metadata).some(value=>/^(EE|ES)$/i.test(value.trim()))).map(row=>row.itemKey));
   const documents=new Set(lookups.filter(row=>row.tableName==="Tipi_Documento").map(row=>row.itemKey));
   for(const guest of submission.guests){
-    if(!["1","2"].includes(guest.sexCode))return "Seleziona il sesso usando i codici previsti da Alloggiati Web.";
-    if(countries.size&&(!countries.has(guest.citizenshipCode)||!countries.has(guest.birthCountryCode)))return "Seleziona cittadinanza e Stato di nascita dalla tabella Alloggiati Web.";
-    if(places.size&&Boolean(guest.birthPlaceCode&&!places.has(guest.birthPlaceCode)))return "Seleziona il luogo di nascita dalla tabella Alloggiati Web.";
-    if(guest.ordinal===0&&places.size&&(!guest.issuePlaceCode||!places.has(guest.issuePlaceCode)))return "Seleziona il luogo di rilascio dalle tabelle Alloggiati Web.";
-    if(guest.ordinal===0&&documents.size&&(!guest.documentTypeCode||!documents.has(guest.documentTypeCode)))return "Seleziona il tipo di documento dalla tabella Alloggiati Web.";
-    if(countries.size&&!countries.has(guest.residenceCountryCode))return "Seleziona lo Stato di residenza dalla tabella ufficiale.";
-    if(guest.residenceCountryCode==="100000100"&&places.size&&!places.has(guest.residencePlaceCode))return "Per chi risiede in Italia seleziona il Comune di residenza dalla tabella ufficiale.";
+    const who=guestLabel(guest);
+    if(!["1","2"].includes(guest.sexCode))return `${who}: seleziona il sesso usando i codici previsti da Alloggiati Web.`;
+    if(countries.size&&!countries.has(guest.citizenshipCode))return `${who}: la cittadinanza non è presente nella tabella Alloggiati Web.`;
+    if(countries.size&&!countries.has(guest.birthCountryCode))return `${who}: lo Stato di nascita non è presente nella tabella Alloggiati Web.`;
+    if(guest.birthCountryCode==="100000100"&&places.size&&(!guest.birthPlaceCode||!places.has(guest.birthPlaceCode)))return `${who}: il Comune di nascita non è presente nella tabella Alloggiati Web.`;
+    if(places.size&&Boolean(guest.birthPlaceCode&&!places.has(guest.birthPlaceCode)))return `${who}: il luogo di nascita non è presente nella tabella Alloggiati Web.`;
+    if(guest.ordinal===0&&places.size&&(!guest.issuePlaceCode||!places.has(guest.issuePlaceCode)))return `${who}: il luogo di rilascio del documento non è presente nella tabella Alloggiati Web.`;
+    if(guest.ordinal===0&&documents.size&&(!guest.documentTypeCode||!documents.has(guest.documentTypeCode)))return `${who}: il tipo di documento non è presente nella tabella Alloggiati Web.`;
+    if(countries.size&&!countries.has(guest.residenceCountryCode))return `${who}: lo Stato di residenza non è presente nella tabella Alloggiati Web.`;
+    if(guest.residenceCountryCode==="100000100"&&places.size&&!places.has(guest.residencePlaceCode))return `${who}: il Comune di residenza non è presente nella tabella Alloggiati Web.`;
   }
   return "";
 }
+
+function guestLabel(guest:CheckinGuestRecord){const name=[guest.firstName,guest.lastName].filter(Boolean).join(" ");return guest.ordinal===0?`Ospite principale${name?` (${name})`:""}`:`Ospite ${guest.ordinal+1}${name?` (${name})`:""}`;}
 
 function required(values:Record<string,string>,prefix:string,fields:string[]){return fields.every(field=>Boolean(values[`${prefix}-${field}`]));}
 function sanitizeValues(input:Record<string,unknown>){

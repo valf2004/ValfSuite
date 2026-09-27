@@ -405,6 +405,39 @@ test("creates direct stays without a booking workflow", async () => {
   assert.match(styles,/\.direct-stay-modal/);
 });
 
+test("keeps guest first and last names separate from booking through check-in", async () => {
+  const [site,publicRoute,managementRoute,dashboard,schema,postgres,checkin,publicCheckin,operatorCheckin,migration] = await Promise.all([
+    source("app/SitePage.tsx"),
+    source("app/api/disponibilita/route.ts"),
+    source("app/api/gestione/richieste/route.ts"),
+    source("app/area-privata/RequestsDashboard.tsx"),
+    source("db/schema.ts"),
+    source("db/availability.postgres.ts"),
+    source("app/checkin/GuestCheckin.tsx"),
+    source("app/checkin/[token]/page.tsx"),
+    source("app/area-riservata/checkin/[id]/page.tsx"),
+    source("drizzle/0013_chemical_frightful_four.sql"),
+  ]);
+  assert.match(site,/name="nome".*name="cognome"/s);
+  assert.match(publicRoute,/firstName = clean\(data\.nome/);
+  assert.match(publicRoute,/lastName = clean\(data\.cognome/);
+  assert.match(publicRoute,/firstName, lastName, name/);
+  assert.match(managementRoute,/firstName,lastName,name,email/);
+  assert.match(managementRoute,/firstName:source\.firstName, lastName:source\.lastName/);
+  assert.match(dashboard,/directDraft\.firstName/);
+  assert.match(dashboard,/directDraft\.lastName/);
+  assert.match(schema,/firstName: text\("first_name"\)/);
+  assert.match(schema,/lastName: text\("last_name"\)/);
+  assert.match(postgres,/ADD COLUMN IF NOT EXISTS first_name text/);
+  assert.match(postgres,/ADD COLUMN IF NOT EXISTS last_name text/);
+  assert.match(migration,/ADD `first_name` text/);
+  assert.match(migration,/ADD `last_name` text/);
+  assert.match(checkin,/"lead-name":bookingNames\.firstName,"lead-surname":bookingNames\.lastName,\.\.\.booking\.draft\?\.values/);
+  assert.match(checkin,/function bookingNameParts/);
+  assert.match(publicCheckin,/firstName:item\.firstName,lastName:item\.lastName/);
+  assert.match(operatorCheckin,/firstName:item\.firstName,lastName:item\.lastName/);
+});
+
 
 test("configures deposit and balance percentages and persists the calculated payment", async () => {
   const [dashboard,route,schema,repository,postgresRepository,paymentPage,paymentForm,balanceRoute,migration] = await Promise.all([
@@ -581,7 +614,14 @@ test("imports and applies the official Alloggiati reference tables", async () =>
   assert.match(form,/alloggiati-places/);
   assert.match(form,/<option value="1">/);
   assert.match(form,/<option value="2">/);
+  assert.match(form,/validateCurrentLookups/);
+  assert.match(form,/companionDocuments/);
+  assert.match(form,/non richiede i dati del documento/);
+  assert.doesNotMatch(form,/type="file"/);
   assert.match(submission,/validateCheckinLookupCodes/);
+  assert.match(submission,/function guestLabel/);
+  assert.match(submission,/Comune di nascita non è presente/);
+  assert.match(submission,/luogo di rilascio del documento non è presente/);
   for(const code of ["16","17","18","19","20"])assert.match(submission,new RegExp(`"${code}"`));
   assert.match(lookups,/active:false/);
   assert.match(postgres,/ON CONFLICT \(table_name,item_key\)/);

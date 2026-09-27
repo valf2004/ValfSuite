@@ -16,5 +16,5 @@ export default async function OperatorCheckinPage({params}:{params:Promise<{id:s
   const item=(await listAvailabilityRequests()).find(row=>row.id===id);
   if(!item||!["accepted","checked_in"].includes(item.status))return <main className="checkin-page"><section className="checkin-complete"><p className="eyebrow">Area riservata</p><h1>Check-in non disponibile</h1><p>La prenotazione non esiste oppure non si trova in uno stato compatibile con il check-in.</p><a className="button" href="/area-riservata">Torna all’area riservata</a></section></main>;
   const [draft,lookups]=await Promise.all([getCheckinSubmission(item.id),listAlloggiatiLookupValues()]);
-  return <GuestCheckin operatorMode submitUrl={`/api/gestione/checkin/${item.id}`} lookups={lookups} booking={{id:item.id,name:item.name,arrivalDate:item.arrivalDate,departureDate:item.departureDate,guestCount:item.guestCount,language:item.language,draft}}/>;
+  return <GuestCheckin operatorMode submitUrl={`/api/gestione/checkin/${item.id}`} lookups={lookups} booking={{id:item.id,firstName:item.firstName,lastName:item.lastName,name:item.name,arrivalDate:item.arrivalDate,departureDate:item.departureDate,guestCount:item.guestCount,language:item.language,draft}}/>;
 }

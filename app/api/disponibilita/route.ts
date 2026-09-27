@@ -18,7 +18,9 @@ export async function POST(request: Request) {
     if (!data || typeof data !== "object") return reply("Richiesta non valida.", 400);
     if (typeof data.website === "string" && data.website.trim()) return Response.json({ ok: true }, { status: 201 });
 
-    const name = clean(data.nome, 120);
+    const firstName = clean(data.nome, 100);
+    const lastName = clean(data.cognome, 100);
+    const name = `${firstName} ${lastName}`.trim();
     const email = clean(data.email, 254).toLowerCase();
     const arrivalDate = clean(data.arrivo, 10);
     const departureDate = clean(data.partenza, 10);
@@ -26,7 +28,7 @@ export async function POST(request: Request) {
     const message = clean(data.messaggio, 2_000);
     const language = languages.has(data.lingua) ? data.lingua : "it";
 
-    if (!name || !isEmail(email) || !isIsoDate(arrivalDate) || !isIsoDate(departureDate) || !data.privacy) return reply("Controlla i campi obbligatori.", 400);
+    if (!firstName || !lastName || !isEmail(email) || !isIsoDate(arrivalDate) || !isIsoDate(departureDate) || !data.privacy) return reply("Controlla i campi obbligatori.", 400);
     if (!Number.isInteger(guestCount) || guestCount < 1 || guestCount > 4) return reply("Il numero di ospiti deve essere compreso tra 1 e 4.", 400);
     const today = localIsoDate(new Date());
     if (arrivalDate < today) return reply("La data di arrivo non può essere nel passato.", 400);
@@ -34,7 +36,7 @@ export async function POST(request: Request) {
 
     const now = new Date().toISOString();
     const id = crypto.randomUUID();
-    await createAvailabilityRequest({ id, name, email, arrivalDate, departureDate, guestCount, message, language, privacyAcceptedAt: now, createdAt: now, updatedAt: now });
+    await createAvailabilityRequest({ id, firstName, lastName, name, email, arrivalDate, departureDate, guestCount, message, language, privacyAcceptedAt: now, createdAt: now, updatedAt: now });
     await recordAvailabilityEvent({ requestId:id, eventType:"request_created", toStatus:"quote_requested", note:message || "Richiesta di disponibilità ricevuta", createdAt:now });
     const emailData = { id, name, email, arrivalDate, departureDate, guestCount, message, language };
     const deliveries = await Promise.allSettled([sendAvailabilityNotification(emailData), sendAvailabilityConfirmation(emailData)]);

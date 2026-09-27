@@ -7,7 +7,7 @@ import type {AlloggiatiLookupValue} from "../../db/alloggiati-lookups";
 
 type Lang = "it" | "en" | "fr" | "es" | "de";
 type CheckinDraft={state:string;language:string;guestCount:number;groupType:"single"|"family"|"group";version:number;values:Record<string,string>};
-type Booking = { id:string; name:string; arrivalDate:string; departureDate:string; guestCount:number; language:string; draft?:CheckinDraft|null };
+type Booking = { id:string; firstName:string|null; lastName:string|null; name:string; arrivalDate:string; departureDate:string; guestCount:number; language:string; draft?:CheckinDraft|null };
 
 const languageNames: Record<Lang, string> = { it: "Italiano", en: "English", fr: "Français", es: "Español", de: "Deutsch" };
 const text: Record<Lang, Record<string, string>> = {
@@ -52,6 +52,14 @@ const dateText: Record<Lang, { pastArrival:string; departureOrder:string; future
   de: { pastArrival:"Das Anreisedatum darf nicht vor dem heutigen Datum liegen.", departureOrder:"Die Abreise muss nach der Anreise liegen.", futureBirth:"Das Geburtsdatum darf nicht in der Zukunft liegen.", oldBirth:"Bitte prüfen Sie das Geburtsdatum: Es darf nicht mehr als 120 Jahre zurückliegen.", adultLead:"Der Hauptgast muss mindestens 18 Jahre alt sein." },
 };
 
+const lookupText:Record<Lang,{lead:string;guest:string;notListed:string;companionDocuments:string}>={
+  it:{lead:"Ospite principale",guest:"Ospite",notListed:"non è presente nelle tabelle Alloggiati Web. Seleziona una voce dall’elenco.",companionDocuments:"Per gli ospiti secondari Alloggiati Web non richiede i dati del documento: sono sufficienti i dati anagrafici."},
+  en:{lead:"Lead guest",guest:"Guest",notListed:"is not in the Alloggiati Web tables. Select an item from the list.",companionDocuments:"Alloggiati Web does not require document details for additional guests; personal details are sufficient."},
+  fr:{lead:"Voyageur principal",guest:"Voyageur",notListed:"ne figure pas dans les tables Alloggiati Web. Sélectionnez une valeur dans la liste.",companionDocuments:"Alloggiati Web ne demande pas les données du document pour les autres voyageurs ; les données personnelles suffisent."},
+  es:{lead:"Huésped principal",guest:"Huésped",notListed:"no figura en las tablas de Alloggiati Web. Selecciona una opción de la lista.",companionDocuments:"Alloggiati Web no exige los datos del documento de los demás huéspedes; bastan los datos personales."},
+  de:{lead:"Hauptgast",guest:"Gast",notListed:"ist in den Alloggiati-Web-Tabellen nicht vorhanden. Wählen Sie einen Eintrag aus der Liste.",companionDocuments:"Für weitere Gäste verlangt Alloggiati Web keine Dokumentdaten; die Personendaten sind ausreichend."},
+};
+
 const liveText:Record<Lang,{badge:string;badgeText:string;complete:string;completeText:string;error:string}>={
   it:{badge:"Check-in protetto",badgeText:"I dati saranno associati esclusivamente alla tua prenotazione.",complete:"Check-in online completato",completeText:"Grazie. Abbiamo registrato i dati del soggiorno; Angela verificherà i documenti originali al vostro arrivo.",error:"Non è stato possibile inviare il check-in. Controlla i dati e riprova."},
   en:{badge:"Secure check-in",badgeText:"Your details will be associated only with your booking.",complete:"Online check-in completed",completeText:"Thank you. We have recorded your stay details; Angela will check the original documents on arrival.",error:"We could not submit the check-in. Please review your details and try again."},
@@ -61,6 +69,7 @@ const liveText:Record<Lang,{badge:string;badgeText:string;complete:string;comple
 };
 
 export function GuestCheckin({token,booking,submitUrl,operatorMode=false,lookups=[]}:{token?:string;booking?:Booking;submitUrl?:string;operatorMode?:boolean;lookups?:AlloggiatiLookupValue[]}={}) {
+  const bookingNames=booking?bookingNameParts(booking):{firstName:"",lastName:""};
   const initialLang=(operatorMode?"it":booking?.language&&booking.language in languageNames?booking.language:"it") as Lang;
   const [lang, setLang] = useState<Lang>(initialLang);
   const [step, setStep] = useState(0);
@@ -69,7 +78,7 @@ export function GuestCheckin({token,booking,submitUrl,operatorMode=false,lookups
   const [complete, setComplete] = useState(false);
   const [submitting,setSubmitting]=useState(false);
   const [submitError,setSubmitError]=useState("");
-  const [values, setValues] = useState<Record<string,string>>(booking?{reference:booking.id,"arrival-date":booking.arrivalDate,"departure-date":booking.departureDate,...booking.draft?.values}:{ reference: "VALF-DEMO-01" });
+  const [values, setValues] = useState<Record<string,string>>(booking?{reference:booking.id,"arrival-date":booking.arrivalDate,"departure-date":booking.departureDate,"lead-name":bookingNames.firstName,"lead-surname":bookingNames.lastName,...booking.draft?.values}:{ reference: "VALF-DEMO-01" });
   const [dateError, setDateError] = useState("");
   const [dateErrorFields, setDateErrorFields] = useState<string[]>([]);
   const t = text[lang];
@@ -83,11 +92,11 @@ export function GuestCheckin({token,booking,submitUrl,operatorMode=false,lookups
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    const error = validateCurrentDates(step, values, minimumArrival, today, oldestBirthDate, adultBirthDate, d);
+    const error = validateCurrentDates(step, values, minimumArrival, today, oldestBirthDate, adultBirthDate, d)||validateCurrentLookups(step,values,guestCount,lookups,lang,t);
     if (error) {
       setDateError(error.message);
       setDateErrorFields(error.fields);
-      requestAnimationFrame(() => event.currentTarget.querySelector<HTMLInputElement>('[aria-invalid="true"]')?.focus());
+      requestAnimationFrame(() => event.currentTarget.querySelector<HTMLElement>(`[name="${error.fields[0]}"]`)?.focus());
       return;
     }
     setDateError("");
@@ -119,7 +128,7 @@ export function GuestCheckin({token,booking,submitUrl,operatorMode=false,lookups
         {(dateError||submitError) && <p id="form-date-error" className="form-error" role="alert">{dateError||submitError}</p>}
         {step === 0 && <fieldset><legend>{t.stay}</legend><p className="form-help">VALF Suite · Via Aurelia Nord 97, Arcola (SP)</p><div className="checkin-grid"><Field label={t.arrival} name="arrival-date" type="date" min={minimumArrival} defaultValue={values["arrival-date"]} invalid={dateErrorFields.includes("arrival-date")}/><Field label={t.departure} name="departure-date" type="date" min={values["arrival-date"] ? nextDay(values["arrival-date"]) : nextDay(minimumArrival)} defaultValue={values["departure-date"]} invalid={dateErrorFields.includes("departure-date")}/><label>{t.count}<select value={guestCount} disabled={Boolean(booking)} onChange={e=>{const count=Number(e.target.value);setGuestCount(count);setGroupType(count===1?"single":"");}}>{[1,2,3,4].map(n=><option key={n} value={n}>{n}</option>)}</select></label>{guestCount>1&&<label>{groupText[lang].label}<select value={groupType} required onChange={event=>setGroupType(event.target.value as "family"|"group")}><option value="" disabled>{t.choose}</option><option value="family">{groupText[lang].family}</option><option value="group">{groupText[lang].group}</option></select></label>}<Field label={t.reference} name="reference" defaultValue={values.reference}/></div></fieldset>}
         {step === 1 && <fieldset><legend>{t.lead}</legend><p className="form-help">{t.legal}</p><PersonFields t={t} ross={rossText[lang]} values={values} prefix="lead" minBirth={oldestBirthDate} maxBirth={adultBirthDate} invalidFields={dateErrorFields} lookups={lookups} document/></fieldset>}
-        {step === 2 && <fieldset><legend>{t.guests}</legend>{companions.length === 0 ? <p className="empty-guests">—</p> : companions.map((_, index)=><section className="companion" key={index}><h2>{t.guests} {index + 1}</h2><PersonFields t={t} ross={rossText[lang]} values={values} prefix={`guest-${index + 1}`} minBirth={oldestBirthDate} maxBirth={today} invalidFields={dateErrorFields} lookups={lookups}/></section>)}</fieldset>}
+        {step === 2 && <fieldset><legend>{t.guests}</legend><p className="form-help">{lookupText[lang].companionDocuments}</p>{companions.length === 0 ? <p className="empty-guests">—</p> : companions.map((_, index)=><section className="companion" key={index}><h2>{t.guests} {index + 1}</h2><PersonFields t={t} ross={rossText[lang]} values={values} prefix={`guest-${index + 1}`} minBirth={oldestBirthDate} maxBirth={today} invalidFields={dateErrorFields} lookups={lookups}/></section>)}</fieldset>}
         {step === 3 && <fieldset><legend>{a.step}</legend><p className="form-help">{a.help}</p><div className="checkin-grid"><Field label={a.time} name="arrival-time" type="time" defaultValue={values["arrival-time"]}/><label>{a.transport}<select name="transport" required defaultValue={normalizeTransport(values.transport)}><option value="" disabled>{t.choose}</option><option value="AUTO">{a.car}</option><option value="TRENO">{a.train}</option><option value="AEREO">{a.plane}</option><option value="ALTRO MEZZO">{a.other}</option></select></label><label>{rossText[lang].tourism}<select name="tourismType" required defaultValue={values.tourismType||""}><option value="" disabled>{t.choose}</option>{tourismTypes.map(type=><option value={type} key={type}>{type}</option>)}</select></label><label className="field-wide">{a.notes}<textarea name="arrival-notes" rows={5} defaultValue={values["arrival-notes"]}/></label></div></fieldset>}
         {step === 4 && <fieldset><legend>{t.review}</legend><div className="review-card"><div><small>{t.stay}</small><strong>{values["arrival-date"] || "—"} → {values["departure-date"] || "—"}</strong><span>{guestCount} {t.count.toLowerCase()}</span></div><div><small>{t.reference}</small><strong>{values.reference || "—"}</strong><span>{values["lead-name"]} {values["lead-surname"]}</span></div><div><small>{a.step}</small><strong>{values.transport || "—"} · {values["arrival-time"] || "—"}</strong><span>{values["arrival-notes"] || a.help}</span></div></div><p className="legal-note">{t.legal}</p><label className="checkin-consent"><input type="checkbox" required/><span>{t.privacy}</span></label></fieldset>}
         <div className="checkin-actions">{step > 0 && <button type="button" className="button-secondary" disabled={submitting} onClick={()=>setStep(step-1)}>{t.back}</button>}<button className="button" type="submit" disabled={submitting}>{submitting?"…":step === steps.length - 1 ? operatorMode?"Registra check-in":t.send : t.next}</button></div>
@@ -151,6 +160,31 @@ function LookupDatalists({lookups}:{lookups:AlloggiatiLookupValue[]}){
 
 function isForeignPlace(row:AlloggiatiLookupValue){return Object.values(row.metadata).some(value=>/^(EE|ES)$/i.test(value.trim()));}
 function normalizeTransport(value?:string){const clean=(value||"").trim().toUpperCase();if(["AUTO","CAR","COCHE","VOITURE"].includes(clean))return "AUTO";if(["TRENO","TRAIN","TREN","ZUG"].includes(clean))return "TRENO";if(["AEREO","PLANE","AVION","FLUGZEUG"].includes(clean))return "AEREO";return clean?"ALTRO MEZZO":"";}
+function bookingNameParts(booking:Booking){const firstName=booking.firstName?.trim()||"";const lastName=booking.lastName?.trim()||"";if(firstName||lastName)return{firstName,lastName};const parts=booking.name.trim().split(/\s+/).filter(Boolean);if(parts.length<2)return{firstName:parts[0]||"",lastName:""};return{firstName:parts.slice(0,-1).join(" "),lastName:parts.at(-1)||""};}
+
+function validateCurrentLookups(step:number,values:Record<string,string>,guestCount:number,lookups:AlloggiatiLookupValue[],lang:Lang,t:Record<string,string>){
+  if(step!==1&&step!==2)return "";
+  const places=new Set(lookups.filter(row=>row.tableName==="Luoghi").map(row=>row.itemKey));
+  if(!places.size)return "";
+  const countries=new Set(lookups.filter(row=>row.tableName==="Luoghi"&&Object.values(row.metadata).some(value=>/^(EE|ES)$/i.test(value.trim()))).map(row=>row.itemKey));
+  const documents=new Set(lookups.filter(row=>row.tableName==="Tipi_Documento").map(row=>row.itemKey));
+  const ordinals=step===1?[0]:Array.from({length:Math.max(0,guestCount-1)},(_,index)=>index+1);
+  const message=lookupText[lang];
+  for(const ordinal of ordinals){
+    const prefix=ordinal===0?"lead":`guest-${ordinal}`;const value=(field:string)=>(values[`${prefix}-${field}`]||"").trim();
+    const fullName=[value("name"),value("surname")].filter(Boolean).join(" ");const who=ordinal===0?message.lead:`${message.guest} ${ordinal+1}${fullName?` (${fullName})`:""}`;
+    const invalid=(field:string,label:string)=>({message:`${who}: ${label} ${message.notListed}`,fields:[`${prefix}-${field}`]});
+    if(countries.size&&!countries.has(value("citizenship")))return invalid("citizenship",t.citizenship);
+    if(countries.size&&!countries.has(value("birthCountry")))return invalid("birthCountry",t.birthCountry);
+    if(value("birthCountry")==="100000100"&&!places.has(value("birthPlace")))return invalid("birthPlace",t.birthPlace);
+    if(value("birthPlace")&&!places.has(value("birthPlace")))return invalid("birthPlace",t.birthPlace);
+    if(countries.size&&!countries.has(value("residenceCountry")))return invalid("residenceCountry",rossText[lang].residenceCountry);
+    if(value("residenceCountry")==="100000100"&&!places.has(value("residencePlace")))return invalid("residencePlace",rossText[lang].residencePlace);
+    if(ordinal===0&&documents.size&&!documents.has(value("documentType")))return invalid("documentType",t.documentType);
+    if(ordinal===0&&!places.has(value("issuePlace")))return invalid("issuePlace",t.issuePlace);
+  }
+  return "";
+}
 
 function validateCurrentDates(step:number, values:Record<string,string>, minimumArrival:string, today:string, oldest:string, adult:string, messages:typeof dateText.it) {
   if (step === 0) {

@@ -29,6 +29,8 @@ export const availabilityRequests = sqliteTable("availability_requests", {
   archiveOutcome: text("archive_outcome", { enum: ["completed", "cancelled", "unavailable"] }),
   sourceRequestId: text("source_request_id"),
   relationReason: text("relation_reason", { enum: ["new_stay", "stay_change"] }),
+  firstName: text("first_name"),
+  lastName: text("last_name"),
   name: text("name").notNull(),
   email: text("email").notNull(),
   arrivalDate: text("arrival_date").notNull(),
