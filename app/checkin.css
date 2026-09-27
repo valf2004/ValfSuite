@@ -430,6 +430,8 @@
 .alloggiati-records pre { white-space:pre; overflow:auto; background:#302921; color:#f7f2ea; padding:16px; font-size:11px; }
 .alloggiati-records pre span { display:block; color:#b5d8d4; margin-bottom:8px; }
 .alloggiati-notice,.alloggiati-result { margin-top:24px; padding:20px 22px; border-radius:8px; display:flex; flex-direction:column; gap:5px; }
+.alloggiati-feedback:empty { display:none; }
+.alloggiati-feedback:focus { outline:none; }
 .alloggiati-notice.warning { background:#fff3d6; color:#71551a; }
 .alloggiati-result.success { background:#dceee8; color:#175f55; }
 .alloggiati-result.error { background:#f7dfdc; color:#872f27; }
@@ -438,6 +440,7 @@
 .alloggiati-actions > a { color:#176c63; text-underline-offset:4px; margin-right:8px; }
 .alloggiati-edit-link { margin-right:8px; padding:0; border:0; background:transparent; color:#176c63; cursor:pointer; font:inherit; text-decoration:underline; text-underline-offset:4px; }
 .alloggiati-actions > span { color:#8b392e; font-size:13px; font-weight:700; }
+.alloggiati-actions > .alloggiati-sent-inline { color:#175f55; }
 .alloggiati-actions .alloggiati-send { border:1px solid #96372d; background:#96372d; color:white; border-radius:999px; padding:14px 20px; }
 .alloggiati-actions button:disabled { opacity:.52; cursor:not-allowed; }
 .alloggiati-reconciliation { margin-top:24px; padding:22px; border-left:5px solid #b66d19; background:#fff1d8; color:#6f4c17; }

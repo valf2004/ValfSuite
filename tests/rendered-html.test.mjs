@@ -661,6 +661,9 @@ test("tests, sends and downloads Alloggiati Web receipts with guarded reconcilia
   assert.match(form,/alloggiati-guest-card/);
   assert.match(form,/window\.location\.assign/);
   assert.match(form,/Scarica ricevuta PDF/);
+  assert.match(form,/Invio riuscito: schedine acquisite/);
+  assert.match(form,/Invio acquisito da Alloggiati Web/);
+  assert.match(form,/scrollIntoView/);
   assert.match(route,/privateUserFromCookie/);
   assert.match(route,/item\.status!=="checked_in"/);
   assert.match(records,/record\.length!==168/);
