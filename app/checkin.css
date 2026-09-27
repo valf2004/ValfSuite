@@ -398,6 +398,7 @@
 .alloggiati-title p:not(.eyebrow) { max-width:720px; color:#6e6258; font-size:17px; }
 .alloggiati-title > span { border-radius:999px; padding:10px 16px; font-size:12px; font-weight:700; white-space:nowrap; background:#efe5d8; color:#755f49; }
 .alloggiati-title > span.validated { background:#dceee8; color:#175f55; }
+.alloggiati-title > span.warning { background:#fff0ce; color:#76571a; }
 .alloggiati-summary { display:grid; grid-template-columns:1.2fr 1fr .7fr; background:white; border:1px solid #e1d8ce; box-shadow:0 20px 55px rgba(61,48,37,.06); margin-bottom:28px; }
 .alloggiati-summary > div { padding:25px 28px; display:flex; flex-direction:column; border-right:1px solid #ece3d9; }
 .alloggiati-summary > div:last-child { border-right:0; }
@@ -412,6 +413,18 @@
 .alloggiati-table th { color:#755f49; text-transform:uppercase; letter-spacing:.1em; font-size:11px; }
 .alloggiati-table td { font-size:14px; color:#49392c; }
 .alloggiati-table code { color:#176c63; font-weight:700; }
+.alloggiati-table tbody tr { cursor:pointer; transition:background .16s ease,box-shadow .16s ease; }
+.alloggiati-table tbody tr:hover,.alloggiati-table tbody tr:focus,.alloggiati-table tbody tr.active { outline:0; background:#edf6f3; box-shadow:inset 4px 0 #176c63; }
+.alloggiati-guest-card { margin-top:12px; padding:18px 20px; border:1px solid #d8cec3; background:#fbf8f3; }
+.alloggiati-guest-card header { display:flex; align-items:flex-end; justify-content:space-between; gap:20px; margin-bottom:14px; }
+.alloggiati-guest-card header div { display:flex; flex-direction:column; gap:3px; }
+.alloggiati-guest-card header small { color:#7b6a5d; font-size:10px; font-weight:700; letter-spacing:.1em; text-transform:uppercase; }
+.alloggiati-guest-card header strong { color:#49392c; font:600 25px/1.1 'Cormorant Garamond',serif; }
+.alloggiati-guest-card header > span { color:#827468; font-size:11px; }
+.alloggiati-guest-card dl { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:1px; margin:0; background:#e5dcd2; }
+.alloggiati-guest-card dl > div { min-width:0; padding:10px 12px; background:white; }
+.alloggiati-guest-card dt { margin-bottom:3px; color:#806e5e; font-size:9px; font-weight:700; letter-spacing:.07em; text-transform:uppercase; }
+.alloggiati-guest-card dd { margin:0; overflow-wrap:anywhere; color:#49392c; font-size:12px; line-height:1.35; }
 .alloggiati-records { margin-top:18px; border:1px solid #ddd1c4; background:#f2eadf; padding:16px 20px; }
 .alloggiati-records summary { cursor:pointer; color:#49392c; font-weight:700; }
 .alloggiati-records pre { white-space:pre; overflow:auto; background:#302921; color:#f7f2ea; padding:16px; font-size:11px; }
@@ -423,7 +436,14 @@
 .alloggiati-result p { margin:0; }
 .alloggiati-actions { display:flex; align-items:center; flex-wrap:wrap; gap:14px; margin-top:30px; }
 .alloggiati-actions > a { color:#176c63; text-underline-offset:4px; margin-right:8px; }
-.alloggiati-actions button:last-child { border:1px solid #cabaaa; background:#eee6dd; color:#8d7e70; border-radius:999px; padding:14px 20px; }
+.alloggiati-edit-link { margin-right:8px; padding:0; border:0; background:transparent; color:#176c63; cursor:pointer; font:inherit; text-decoration:underline; text-underline-offset:4px; }
+.alloggiati-actions > span { color:#8b392e; font-size:13px; font-weight:700; }
+.alloggiati-actions .alloggiati-send { border:1px solid #96372d; background:#96372d; color:white; border-radius:999px; padding:14px 20px; }
+.alloggiati-actions button:disabled { opacity:.52; cursor:not-allowed; }
+.alloggiati-reconciliation { margin-top:24px; padding:22px; border-left:5px solid #b66d19; background:#fff1d8; color:#6f4c17; }
+.alloggiati-reconciliation p { margin:6px 0 16px; max-width:850px; }
+.alloggiati-reconciliation > div { display:flex; flex-wrap:wrap; gap:10px; }
+.alloggiati-reconciliation button { border:1px solid #9b6a25; border-radius:999px; padding:10px 14px; background:white; color:#6f4c17; cursor:pointer; font-weight:700; }
 .alloggiati-unavailable { max-width:760px; margin:70px auto; padding:45px; background:white; box-shadow:0 20px 60px rgba(61,48,37,.08); }
 .alloggiati-unavailable h1 { font-size:52px; }
 .alloggiati-test-action { border-color:#176c63!important; color:#176c63!important; font-weight:700!important; }
@@ -441,6 +461,8 @@
   .alloggiati-summary { grid-template-columns:1fr; }
   .alloggiati-summary > div { border-right:0; border-bottom:1px solid #ece3d9; }
   .alloggiati-summary > div:last-child { border-bottom:0; }
+  .alloggiati-guest-card header { align-items:flex-start; flex-direction:column; gap:6px; }
+  .alloggiati-guest-card dl { grid-template-columns:1fr 1fr; }
   .alloggiati-actions { align-items:stretch; flex-direction:column; }
   .alloggiati-actions > * { width:100%; text-align:center; }
   .ross-validation > div { grid-template-columns:1fr; }

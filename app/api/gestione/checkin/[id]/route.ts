@@ -1,5 +1,5 @@
 import { headers } from "next/headers";
-import { listAvailabilityRequests, recordCheckinSubmission } from "../../../../../db/availability";
+import { getCheckinSubmission, listAvailabilityRequests, recordCheckinSubmission } from "../../../../../db/availability";
 import { prepareCheckinSubmission,validateCheckinLookupCodes } from "../../../../lib/checkin-submission";
 import { privateUserFromCookie } from "../../../../lib/google-auth";
 import {listAlloggiatiLookupValues} from "../../../../../db/alloggiati-lookups";
@@ -14,6 +14,7 @@ export async function POST(request:Request,{params}:{params:Promise<{id:string}>
     const item=(await listAvailabilityRequests()).find(row=>row.id===id);
     if(!item)return Response.json({message:"Prenotazione non trovata."},{status:404});
     if(!["accepted","checked_in"].includes(item.status))return Response.json({message:item.status==="police_registered"?"Check-in già inviato ad Alloggiati Web.":"Il check-in non è disponibile per questa prenotazione."},{status:409});
+    const existing=await getCheckinSubmission(item.id);if(existing?.sendAttemptedAt)return Response.json({message:"Il check-in non è modificabile: esiste un invio Alloggiati Web già effettuato o da verificare."},{status:409});
     const {data,files}=await parseCheckinRequest(request);
     const result=prepareCheckinSubmission(data,item);
     if(!result.saved)return Response.json({message:result.error},{status:400});

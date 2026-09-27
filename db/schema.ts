@@ -55,7 +55,7 @@ export const availabilityRequests = sqliteTable("availability_requests", {
 
 export const checkinPractices = sqliteTable("checkin_practices", {
   requestId: text("request_id").primaryKey().references(() => availabilityRequests.id, { onDelete: "cascade" }),
-  state: text("state", { enum: ["draft", "ready", "validated", "sent", "error"] }).notNull().default("draft"),
+  state: text("state", { enum: ["draft", "ready", "validated", "sending", "sent", "error"] }).notNull().default("draft"),
   language: text("language").notNull().default("it"),
   guestCount: integer("guest_count").notNull(),
   groupType: text("group_type", { enum: ["single", "family", "group"] }).notNull(),
@@ -67,6 +67,9 @@ export const checkinPractices = sqliteTable("checkin_practices", {
   source: text("source", { enum: ["guest", "operator"] }).notNull(),
   version: integer("version").notNull().default(1),
   lastError: text("last_error"),
+  validatedApartmentId: text("validated_apartment_id").notNull().default(""),
+  sendAttemptedAt: text("send_attempted_at"),
+  sendOutcomeJson: text("send_outcome_json"),
   sentAt: text("sent_at"),
   createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
   updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
@@ -111,7 +114,7 @@ export const checkinDocuments = sqliteTable("checkin_documents", {
 export const availabilityEvents = sqliteTable("availability_events", {
   id: text("id").primaryKey(),
   requestId: text("request_id").notNull().references(() => availabilityRequests.id, { onDelete: "cascade" }),
-  eventType: text("event_type", { enum: ["request_created", "related_request_created", "email_sent", "payment_reported", "payment_confirmed", "balance_requested", "checkin_invited", "checkin_submitted", "checkin_updated", "alloggiati_tested", "status_changed"] }).notNull(),
+  eventType: text("event_type", { enum: ["request_created", "related_request_created", "email_sent", "payment_reported", "payment_confirmed", "balance_requested", "checkin_invited", "checkin_submitted", "checkin_updated", "alloggiati_tested", "alloggiati_sent", "alloggiati_send_failed", "alloggiati_send_resolved", "status_changed"] }).notNull(),
   fromStatus: text("from_status"),
   toStatus: text("to_status"),
   actorEmail: text("actor_email"),

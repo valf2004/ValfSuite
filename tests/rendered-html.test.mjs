@@ -633,32 +633,56 @@ test("imports and applies the official Alloggiati reference tables", async () =>
   assert.match(migration,/synced_at/);
 });
 
-test("prepares and audits Alloggiati Web test submissions without enabling real sends", async () => {
-  const [dashboard,page,form,route,records,client,repository,postgres,schema]=await Promise.all([
+test("tests and sends Alloggiati Web records with guarded reconciliation", async () => {
+  const [dashboard,page,form,route,sendRoute,resolveRoute,records,client,repository,postgres,schema,upload,migration,apartmentMigration]=await Promise.all([
     source("app/area-privata/RequestsDashboard.tsx"),
     source("app/area-riservata/alloggiati/[id]/page.tsx"),
     source("app/area-privata/AlloggiatiTestForm.tsx"),
     source("app/api/gestione/alloggiati/test/[id]/route.ts"),
+    source("app/api/gestione/alloggiati/send/[id]/route.ts"),
+    source("app/api/gestione/alloggiati/send/[id]/resolve/route.ts"),
     source("app/lib/alloggiati-record.ts"),
     source("app/lib/alloggiati-client.ts"),
     source("db/availability.ts"),
     source("db/availability.postgres.ts"),
     source("db/schema.ts"),
+    source("app/lib/checkin-document-upload.ts"),
+    source("drizzle/0015_eminent_pyro.sql"),
+    source("drizzle/0016_tidy_umar.sql"),
   ]);
   assert.match(dashboard,/Prepara Alloggiati/);
   assert.match(page,/buildAlloggiatiRecords/);
   assert.match(form,/Invia test/);
-  assert.match(form,/Invio reale · non attivo/);
-  assert.match(form,/disabled title=/);
+  assert.match(form,/Invia definitivamente/);
+  assert.match(form,/INVIO DEFINITIVO/);
+  assert.match(form,/Nessuna schedina acquisita/);
+  assert.match(form,/alloggiati-guest-card/);
+  assert.match(form,/window\.location\.assign/);
   assert.match(route,/privateUserFromCookie/);
   assert.match(route,/item\.status!=="checked_in"/);
   assert.match(records,/record\.length!==168/);
   assert.match(records,/Massimo 30|da 1 a 30 giorni/);
+  assert.match(records,/Comune di residenza/);
   assert.match(client,/GestioneAppartamenti_Test/);
+  assert.match(client,/GestioneAppartamenti_Send/);
+  assert.match(client,/sendAlloggiatiRecords/);
   assert.match(client,/AlloggiatiService\/\$\{action\}/);
+  assert.match(sendRoute,/beginAlloggiatiSend/);
+  assert.match(sendRoute,/requiresReconciliation/);
+  assert.match(sendRoute,/recordAlloggiatiSendResult/);
+  assert.match(sendRoute,/if\(!recorded\)/);
+  assert.match(resolveRoute,/resolveAlloggiatiSendAttempt/);
+  assert.match(resolveRoute,/SCHEDINE ACQUISITE/);
   assert.match(repository,/recordAlloggiatiTestResult/);
+  assert.match(repository,/beginAlloggiatiSend/);
   assert.match(postgres,/recordAlloggiatiTestResult/);
+  assert.match(postgres,/send_attempted_at IS NULL/);
+  assert.match(postgres,/validated_apartment_id/);
   assert.match(schema,/alloggiati_tested/);
+  assert.match(schema,/alloggiati_sent/);
+  assert.match(upload,/removeAllCheckinDocuments/);
+  assert.match(migration,/send_attempted_at/);
+  assert.match(apartmentMigration,/validated_apartment_id/);
 });
 
 test("produces a locally validated Ross1000 arrival XML without enabling automatic sends", async () => {

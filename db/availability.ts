@@ -1,4 +1,4 @@
-import { and, asc, desc, eq } from "drizzle-orm";
+import { and, asc, desc, eq, isNull } from "drizzle-orm";
 import { availabilityEvents, availabilityQuotes, availabilityRequests, checkinDocuments, checkinGuests, checkinPractices, paymentSubmissions } from "./schema";
 import type { CheckinSubmissionRecord } from "../app/lib/checkin-submission";
 
@@ -16,6 +16,8 @@ export type PaymentConfirmationInput = { requestId:string; amountCents:number; s
 export type GuestCommunicationInput = { requestId:string; eventType:"balance_requested"|"checkin_invited"; subject:string; body:string; note:string; actorEmail:string; paymentTokenHash?:string|null };
 export type PaymentSubmissionInput = { id:string; quoteId:string; requestId:string; method:PaymentMethod; paidAmountCents:number; paidAt:string; paymentReference:string; message:string; receiptKey:string|null; receiptName:string|null; receiptContentType:string|null; receiptSize:number|null; createdAt:string };
 export type AlloggiatiTestAudit={requestId:string;success:boolean;validCount:number;totalCount:number;message:string;details:unknown;actorEmail:string;checkinVersion:number;apartmentId?:string};
+export type AlloggiatiSendAudit={requestId:string;success:boolean;validCount:number;totalCount:number;message:string;details:unknown;actorEmail:string;checkinVersion:number;apartmentId?:string;attemptedAt:string};
+export type AlloggiatiSendResolution="received"|"not_received";
 export type CheckinDocument=typeof checkinDocuments.$inferSelect;
 export type CheckinDocumentInput=typeof checkinDocuments.$inferInsert;
 
@@ -76,7 +78,7 @@ export async function recordGuestCommunication(input:GuestCommunicationInput){
 export async function recordCheckinSubmission(requestId:string,submission:CheckinSubmissionRecord,actorEmail?:string){
   if(usesPostgres())return (await postgresRepository()).recordCheckinSubmission(requestId,submission,actorEmail);
   const {getDb}=await import(".");const db=getDb();const current=await db.select().from(availabilityRequests).where(eq(availabilityRequests.id,requestId));const existing=await db.select().from(checkinPractices).where(eq(checkinPractices.requestId,requestId));const createdAt=new Date().toISOString();
-  const practice={requestId,state:"ready" as const,language:submission.language,guestCount:submission.guestCount,groupType:submission.groupType,arrivalTime:submission.arrivalTime,transport:submission.transport,tourismType:submission.tourismType,arrivalNotes:submission.arrivalNotes,privacyAcceptedAt:submission.privacyAcceptedAt,source:actorEmail?"operator" as const:"guest" as const,version:(existing[0]?.version||0)+1,lastError:null,updatedAt:createdAt};
+  const practice={requestId,state:"ready" as const,language:submission.language,guestCount:submission.guestCount,groupType:submission.groupType,arrivalTime:submission.arrivalTime,transport:submission.transport,tourismType:submission.tourismType,arrivalNotes:submission.arrivalNotes,privacyAcceptedAt:submission.privacyAcceptedAt,source:actorEmail?"operator" as const:"guest" as const,version:(existing[0]?.version||0)+1,lastError:null,validatedApartmentId:"",updatedAt:createdAt};
   await db.insert(checkinPractices).values({...practice,createdAt:existing[0]?.createdAt||createdAt}).onConflictDoUpdate({target:checkinPractices.requestId,set:practice});
   await db.delete(checkinGuests).where(eq(checkinGuests.requestId,requestId));
   if(submission.guests.length)await db.insert(checkinGuests).values(submission.guests.map(guest=>({id:`${requestId}:${guest.ordinal}`,requestId,...guest})));
@@ -115,8 +117,31 @@ export async function deleteCheckinDocumentMetadata(id:string):Promise<CheckinDo
 export async function recordAlloggiatiTestResult(input:AlloggiatiTestAudit){
   if(usesPostgres())return (await postgresRepository()).recordAlloggiatiTestResult(input);
   const {getDb}=await import(".");const db=getDb();const createdAt=new Date().toISOString();
-  await db.update(checkinPractices).set({state:input.success?"validated":"error",lastError:input.success?null:input.message,updatedAt:createdAt}).where(and(eq(checkinPractices.requestId,input.requestId),eq(checkinPractices.version,input.checkinVersion)));
+  await db.update(checkinPractices).set({state:input.success?"validated":"error",lastError:input.success?null:input.message,validatedApartmentId:input.success?(input.apartmentId||""):"",updatedAt:createdAt}).where(and(eq(checkinPractices.requestId,input.requestId),eq(checkinPractices.version,input.checkinVersion),isNull(checkinPractices.sendAttemptedAt)));
   return recordAvailabilityEvent({requestId:input.requestId,eventType:"alloggiati_tested",actorEmail:input.actorEmail,note:input.success?`Test Alloggiati superato: ${input.validCount}/${input.totalCount} schedine valide`:`Test Alloggiati non superato: ${input.validCount}/${input.totalCount} schedine valide`,body:JSON.stringify({success:input.success,validCount:input.validCount,totalCount:input.totalCount,message:input.message,details:input.details,checkinVersion:input.checkinVersion,apartmentId:input.apartmentId||null}),createdAt});
+}
+
+export async function beginAlloggiatiSend(requestId:string,checkinVersion:number,apartmentId:string,attemptedAt:string){
+  if(usesPostgres())return (await postgresRepository()).beginAlloggiatiSend(requestId,checkinVersion,apartmentId,attemptedAt);
+  const {getDb}=await import(".");const rows=await getDb().update(checkinPractices).set({state:"sending",sendAttemptedAt:attemptedAt,sendOutcomeJson:null,lastError:null,updatedAt:attemptedAt}).where(and(eq(checkinPractices.requestId,requestId),eq(checkinPractices.version,checkinVersion),eq(checkinPractices.state,"validated"),eq(checkinPractices.validatedApartmentId,apartmentId),isNull(checkinPractices.sendAttemptedAt))).returning();return rows.length===1;
+}
+
+export async function recordAlloggiatiSendResult(input:AlloggiatiSendAudit){
+  if(usesPostgres())return (await postgresRepository()).recordAlloggiatiSendResult(input);
+  const {getDb}=await import(".");const db=getDb();const completedAt=new Date().toISOString();const outcome=JSON.stringify({success:input.success,validCount:input.validCount,totalCount:input.totalCount,message:input.message,details:input.details,checkinVersion:input.checkinVersion,apartmentId:input.apartmentId||null,attemptedAt:input.attemptedAt,completedAt});
+  const practice=await db.update(checkinPractices).set({state:input.success?"sent":"error",lastError:input.success?null:input.message,sendOutcomeJson:outcome,sentAt:input.success?completedAt:null,updatedAt:completedAt}).where(and(eq(checkinPractices.requestId,input.requestId),eq(checkinPractices.version,input.checkinVersion),eq(checkinPractices.state,"sending"),eq(checkinPractices.sendAttemptedAt,input.attemptedAt))).returning();
+  if(!practice.length)return false;
+  if(input.success)await db.update(availabilityRequests).set({status:"police_registered",archiveOutcome:null,updatedAt:completedAt}).where(eq(availabilityRequests.id,input.requestId));
+  await recordAvailabilityEvent({requestId:input.requestId,eventType:input.success?"alloggiati_sent":"alloggiati_send_failed",fromStatus:"checked_in",toStatus:input.success?"police_registered":"checked_in",actorEmail:input.actorEmail,note:input.success?`Invio Alloggiati Web completato: ${input.validCount}/${input.totalCount} schedine acquisite`:`Invio Alloggiati Web da verificare: ${input.message}`,body:outcome,createdAt:completedAt});
+  return true;
+}
+
+export async function resolveAlloggiatiSendAttempt(requestId:string,resolution:AlloggiatiSendResolution,actorEmail:string){
+  if(usesPostgres())return (await postgresRepository()).resolveAlloggiatiSendAttempt(requestId,resolution,actorEmail);
+  const {getDb}=await import(".");const db=getDb();const current=(await db.select().from(checkinPractices).where(eq(checkinPractices.requestId,requestId)).limit(1))[0];if(!current?.sendAttemptedAt||!["sending","error"].includes(current.state))return false;const resolvedAt=new Date().toISOString();
+  if(resolution==="received"){await db.update(checkinPractices).set({state:"sent",sentAt:resolvedAt,lastError:null,updatedAt:resolvedAt}).where(eq(checkinPractices.requestId,requestId));await db.update(availabilityRequests).set({status:"police_registered",archiveOutcome:null,updatedAt:resolvedAt}).where(eq(availabilityRequests.id,requestId));}
+  else await db.update(checkinPractices).set({state:"ready",validatedApartmentId:"",sendAttemptedAt:null,sendOutcomeJson:null,lastError:null,sentAt:null,updatedAt:resolvedAt}).where(eq(checkinPractices.requestId,requestId));
+  await recordAvailabilityEvent({requestId,eventType:"alloggiati_send_resolved",fromStatus:"checked_in",toStatus:resolution==="received"?"police_registered":"checked_in",actorEmail,note:resolution==="received"?"Esito verificato manualmente sul portale: schedine acquisite":"Esito verificato manualmente sul portale: nessuna schedina acquisita, nuovo test richiesto",body:JSON.stringify({resolution,previousAttemptedAt:current.sendAttemptedAt,resolvedAt}),createdAt:resolvedAt});return true;
 }
 
 export async function findActiveQuoteByTokenHash(tokenHash:string):Promise<PublicQuote|null>{
@@ -154,5 +179,5 @@ export async function listAvailabilityEvents(){
 function checkinDraft(practice:typeof checkinPractices.$inferSelect,guests:Array<typeof checkinGuests.$inferSelect>){
   const values:Record<string,string>={"arrival-time":practice.arrivalTime,transport:practice.transport,tourismType:practice.tourismType,"arrival-notes":practice.arrivalNotes};
   for(const guest of guests){const prefix=guest.ordinal===0?"lead":`guest-${guest.ordinal}`;values[`${prefix}-name`]=guest.firstName;values[`${prefix}-surname`]=guest.lastName;values[`${prefix}-birth`]=guest.birthDate;values[`${prefix}-sex`]=guest.sexCode;values[`${prefix}-citizenship`]=guest.citizenshipCode;values[`${prefix}-birthCountry`]=guest.birthCountryCode;if(guest.birthPlaceCode)values[`${prefix}-birthPlace`]=guest.birthPlaceCode;if(guest.residenceCountryCode)values[`${prefix}-residenceCountry`]=guest.residenceCountryCode;if(guest.residencePlaceCode)values[`${prefix}-residencePlace`]=guest.residencePlaceCode;if(guest.documentTypeCode)values[`${prefix}-documentType`]=guest.documentTypeCode;if(guest.documentNumber)values[`${prefix}-documentNumber`]=guest.documentNumber;if(guest.issuePlaceCode)values[`${prefix}-issuePlace`]=guest.issuePlaceCode;}
-  return {state:practice.state,language:practice.language,guestCount:practice.guestCount,groupType:practice.groupType,version:practice.version,lastError:practice.lastError,values};
+  return {state:practice.state,language:practice.language,guestCount:practice.guestCount,groupType:practice.groupType,version:practice.version,lastError:practice.lastError,validatedApartmentId:practice.validatedApartmentId,sendAttemptedAt:practice.sendAttemptedAt,sentAt:practice.sentAt,values};
 }

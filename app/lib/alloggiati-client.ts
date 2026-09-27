@@ -26,6 +26,19 @@ export async function testAlloggiatiRecords(records:string[],apartmentId?:string
   return parseTestResponse(await soap(action,body),action,records.length);
 }
 
+export async function sendAlloggiatiRecords(records:string[],apartmentId?:string):Promise<AlloggiatiTestResult>{
+  if(!records.length)throw new Error("Non ci sono schedine da inviare.");
+  const user=required("ALLOGGIATI_USER"),password=required("ALLOGGIATI_PASSWORD"),wsKey=required("ALLOGGIATI_WSKEY");
+  const token=await generateToken(user,password,wsKey);const mode=(process.env["ALLOGGIATI_ACCOUNT_MODE"]||"standard")==="apartments"?"apartments":"standard";
+  const action=mode==="apartments"?"GestioneAppartamenti_Send":"Send";
+  const apartment=mode==="apartments"?(apartmentId||process.env["ALLOGGIATI_APARTMENT_ID"]||"").trim():"";
+  if(mode==="apartments"&&!/^\d+$/.test(apartment))throw new Error("Seleziona un appartamento valido prima dell’invio.");
+  const list=records.map(record=>`<string>${xml(record)}</string>`).join("");
+  const apartmentTag=mode==="apartments"?`<IdAppartamento>${xml(apartment)}</IdAppartamento>`:"";
+  const body=`<${action} xmlns="AlloggiatiService"><Utente>${xml(user)}</Utente><token>${xml(token)}</token><ElencoSchedine>${list}</ElencoSchedine>${apartmentTag}</${action}>`;
+  return parseTestResponse(await soap(action,body),action,records.length);
+}
+
 async function generateToken(user:string,password:string,wsKey:string){
   const body=`<GenerateToken xmlns="AlloggiatiService"><Utente>${xml(user)}</Utente><Password>${xml(password)}</Password><WsKey>${xml(wsKey)}</WsKey></GenerateToken>`;
   const response=await soap("GenerateToken",body);const token=tag(response,"token");if(!token)throw new Error(serviceError(response)||"Alloggiati Web non ha restituito un token.");return token;

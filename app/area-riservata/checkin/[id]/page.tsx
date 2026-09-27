@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import { headers } from "next/headers";
 import { getCheckinSubmission, listAvailabilityRequests, listCheckinDocuments } from "../../../../db/availability";
 import { GuestCheckin } from "../../../checkin/GuestCheckin";
@@ -14,7 +15,8 @@ export default async function OperatorCheckinPage({params}:{params:Promise<{id:s
   if(!user)return <PrivateLogin configured={authIsConfigured()}/>;
   const {id}=await params;
   const item=(await listAvailabilityRequests()).find(row=>row.id===id);
-  if(!item||!["accepted","checked_in"].includes(item.status))return <main className="checkin-page"><section className="checkin-complete"><p className="eyebrow">Area riservata</p><h1>Check-in non disponibile</h1><p>La prenotazione non esiste oppure non si trova in uno stato compatibile con il check-in.</p><a className="button" href="/area-riservata">Torna all’area riservata</a></section></main>;
+  if(!item||!["accepted","checked_in"].includes(item.status))return <main className="checkin-page"><section className="checkin-complete"><p className="eyebrow">Area riservata</p><h1>Check-in non disponibile</h1><p>La prenotazione non esiste oppure non si trova in uno stato compatibile con il check-in.</p><Link className="button" href="/area-riservata">Torna all’area riservata</Link></section></main>;
   const [draft,lookups,documents]=await Promise.all([getCheckinSubmission(item.id),listAlloggiatiLookupValues(),listCheckinDocuments(item.id)]);
+  if(draft?.sendAttemptedAt)return <main className="checkin-page"><section className="checkin-complete"><p className="eyebrow">Area riservata</p><h1>Check-in bloccato</h1><p>Esiste un invio Alloggiati Web già effettuato o da riconciliare. Verifica prima l’esito sul portale.</p><Link className="button" href={`/area-riservata/alloggiati/${item.id}`}>Verifica invio Alloggiati</Link></section></main>;
   return <GuestCheckin operatorMode submitUrl={`/api/gestione/checkin/${item.id}`} lookups={lookups} existingDocuments={documents.map(document=>({id:document.id,name:document.originalName,size:document.size}))} booking={{id:item.id,firstName:item.firstName,lastName:item.lastName,name:item.name,arrivalDate:item.arrivalDate,departureDate:item.departureDate,guestCount:item.guestCount,language:item.language,draft}}/>;
 }

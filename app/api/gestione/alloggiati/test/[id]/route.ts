@@ -15,6 +15,7 @@ export async function POST(request:Request,{params}:{params:Promise<{id:string}>
   try{
     const [draft,lookups]=await Promise.all([getCheckinSubmission(id),listAlloggiatiLookupValues()]);
     if(!draft)throw new Error("Completa il check-in prima di eseguire il test.");
+    if(draft.sendAttemptedAt)throw new Error("Esiste un invio reale da verificare sul portale: il test è bloccato per evitare duplicati.");
     if(draft.version<1)throw new Error("La versione del check-in non è valida.");
     if((process.env["ALLOGGIATI_ACCOUNT_MODE"]||"standard")==="apartments"){
       const allowed=new Set(lookups.filter(row=>row.tableName==="ListaAppartamenti").map(row=>row.itemKey));

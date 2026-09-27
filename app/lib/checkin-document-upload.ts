@@ -41,6 +41,13 @@ export async function removeCheckinDocument(id:string){
   return metadata;
 }
 
+export async function removeAllCheckinDocuments(requestId:string){
+  const documents=await listCheckinDocuments(requestId);
+  await Promise.all(documents.map(document=>deleteReceipt(document.storageKey)));
+  await replaceCheckinDocuments(requestId,[]);
+  return documents.length;
+}
+
 export class CheckinUploadError extends Error{}
 
 async function fileMatchesType(file:File){

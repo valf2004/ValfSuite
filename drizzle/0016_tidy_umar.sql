@@ -1,0 +1,1 @@
+ALTER TABLE `checkin_practices` ADD `validated_apartment_id` text DEFAULT '' NOT NULL;
