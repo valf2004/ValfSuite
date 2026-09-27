@@ -38,7 +38,7 @@ export async function POST(request: Request) {
     const guestCount=Number(data.guestCount);
     if(!name||typeof data.arrivalDate!=="string"||typeof data.departureDate!=="string"||typeof data.language!=="string"||!languages.includes(data.language as typeof languages[number])||typeof data.source!=="string"||!sources.includes(data.source as typeof sources[number]))return Response.json({message:"Controlla i dati del soggiorno."},{status:400});
     if(email&&!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))return Response.json({message:"Inserisci un indirizzo email valido oppure lascia il campo vuoto."},{status:400});
-    if(!isIsoDate(data.arrivalDate)||!isIsoDate(data.departureDate)||data.arrivalDate<todayAtProperty()||data.departureDate<=data.arrivalDate||!Number.isInteger(guestCount)||guestCount<1||guestCount>4)return Response.json({message:"Controlla le date e il numero degli ospiti."},{status:400});
+    if(!isIsoDate(data.arrivalDate)||!isIsoDate(data.departureDate)||data.departureDate<=data.arrivalDate||!Number.isInteger(guestCount)||guestCount<1||guestCount>4)return Response.json({message:"Controlla le date e il numero degli ospiti."},{status:400});
     const rows=await listAvailabilityRequests();
     const conflicts=findConflicts(rows,data.arrivalDate,data.departureDate);
     if(conflicts.length&&data.force!==true)return Response.json({message:"Esiste già una prenotazione confermata nello stesso periodo.",conflicts},{status:409});

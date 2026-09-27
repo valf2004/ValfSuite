@@ -391,9 +391,12 @@ test("creates direct stays without a booking workflow", async () => {
   assert.match(route,/findConflicts\(rows,data\.arrivalDate,data\.departureDate\)/);
   assert.match(route,/data\.force!==true/);
   assert.match(route,/Soggiorno diretto inserito dall’operatore/);
+  assert.doesNotMatch(route,/data\.arrivalDate<todayAtProperty\(\)/);
   assert.match(dashboard,/\+ Nuovo soggiorno diretto/);
   assert.match(dashboard,/mode:"direct"/);
   assert.match(dashboard,/E-mail facoltativa/);
+  assert.match(dashboard,/type="date" value=\{directDraft\.arrivalDate\}/);
+  assert.match(dashboard,/min=\{directDraft\.arrivalDate\?shiftDate\(directDraft\.arrivalDate,1\):undefined\}/);
   assert.match(dashboard,/Crea comunque/);
   assert.match(dashboard,/setActive\("accepted"\)/);
   assert.match(dashboard,/Boolean\(item\.email\).*Invita al check-in/);
