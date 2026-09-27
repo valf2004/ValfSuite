@@ -94,6 +94,20 @@ export const checkinGuests = sqliteTable("checkin_guests", {
   index("idx_checkin_guests_request").on(table.requestId),
 ]);
 
+export const checkinDocuments = sqliteTable("checkin_documents", {
+  id: text("id").primaryKey(),
+  requestId: text("request_id").notNull().references(() => availabilityRequests.id, { onDelete: "cascade" }),
+  guestOrdinal: integer("guest_ordinal").notNull().default(0),
+  storageKey: text("storage_key").notNull(),
+  originalName: text("original_name").notNull(),
+  contentType: text("content_type").notNull(),
+  size: integer("size").notNull(),
+  uploadedBy: text("uploaded_by", { enum: ["guest", "operator"] }).notNull(),
+  createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+}, (table) => [
+  index("idx_checkin_documents_request_created").on(table.requestId, table.createdAt),
+]);
+
 export const availabilityEvents = sqliteTable("availability_events", {
   id: text("id").primaryKey(),
   requestId: text("request_id").notNull().references(() => availabilityRequests.id, { onDelete: "cascade" }),

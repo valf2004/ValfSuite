@@ -617,7 +617,9 @@ test("imports and applies the official Alloggiati reference tables", async () =>
   assert.match(form,/validateCurrentLookups/);
   assert.match(form,/companionDocuments/);
   assert.match(form,/non richiede i dati del documento/);
-  assert.doesNotMatch(form,/type="file"/);
+  assert.match(form,/type="file"/);
+  assert.match(form,/accept="application\/pdf,image\/jpeg,image\/png"/);
+  assert.match(form,/new FormData\(\)/);
   assert.match(submission,/validateCheckinLookupCodes/);
   assert.match(submission,/function guestLabel/);
   assert.match(submission,/Comune di nascita non è presente/);

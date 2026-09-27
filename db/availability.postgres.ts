@@ -1,5 +1,5 @@
 import postgres, { type Sql } from "postgres";
-import { availabilityEvents, availabilityRequests } from "./schema";
+import { availabilityEvents, availabilityRequests, checkinDocuments } from "./schema";
 import type { CheckinSubmissionRecord } from "../app/lib/checkin-submission";
 
 export type AvailabilityStatus = "quote_requested" | "quote_sent" | "accepted" | "checked_in" | "police_registered" | "archived";
@@ -24,6 +24,8 @@ export type PaymentSubmissionInput = {
   receiptContentType:string|null; receiptSize:number|null; createdAt:string;
 };
 export type AlloggiatiTestAudit={requestId:string;success:boolean;validCount:number;totalCount:number;message:string;details:unknown;actorEmail:string;checkinVersion:number;apartmentId?:string};
+export type CheckinDocument=typeof checkinDocuments.$inferSelect;
+export type CheckinDocumentInput=typeof checkinDocuments.$inferInsert;
 
 const url = process.env["DATABASE_URL"];
 if (!url) throw new Error("DATABASE_URL is required in the Docker runtime");
@@ -108,6 +110,23 @@ export async function getCheckinSubmission(requestId:string){
   return {state:String(practice.state),language:String(practice.language),guestCount:Number(practice.guest_count),groupType:String(practice.group_type),version:Number(practice.version),lastError:practice.last_error==null?null:String(practice.last_error),values};
 }
 
+export async function listCheckinDocuments(requestId:string):Promise<CheckinDocument[]>{
+  await ready();const rows=await sql`SELECT * FROM checkin_documents WHERE request_id=${requestId} ORDER BY created_at`;
+  return rows.map(mapCheckinDocument);
+}
+
+export async function replaceCheckinDocuments(requestId:string,documents:CheckinDocumentInput[]){
+  await ready();await sql.begin(async transaction=>{await transaction`DELETE FROM checkin_documents WHERE request_id=${requestId}`;for(const document of documents)await transaction`INSERT INTO checkin_documents (id,request_id,guest_ordinal,storage_key,original_name,content_type,size,uploaded_by,created_at) VALUES (${document.id},${document.requestId},${document.guestOrdinal??0},${document.storageKey},${document.originalName},${document.contentType},${document.size},${document.uploadedBy},${document.createdAt??new Date().toISOString()})`;});return documents;
+}
+
+export async function getCheckinDocument(id:string):Promise<CheckinDocument|null>{
+  await ready();const rows=await sql`SELECT * FROM checkin_documents WHERE id=${id} LIMIT 1`;return rows[0]?mapCheckinDocument(rows[0]):null;
+}
+
+export async function deleteCheckinDocumentMetadata(id:string):Promise<CheckinDocument|null>{
+  await ready();const rows=await sql`DELETE FROM checkin_documents WHERE id=${id} RETURNING *`;return rows[0]?mapCheckinDocument(rows[0]):null;
+}
+
 export async function recordAlloggiatiTestResult(input:AlloggiatiTestAudit){
   await ready();const createdAt=new Date().toISOString();
   await sql`UPDATE checkin_practices SET state=${input.success?"validated":"error"},last_error=${input.success?null:input.message},updated_at=${createdAt} WHERE request_id=${input.requestId} AND version=${input.checkinVersion}`;
@@ -173,6 +192,8 @@ async function initializePostgres(client: Sql) {
   await client`ALTER TABLE checkin_guests ADD COLUMN IF NOT EXISTS residence_country_code text`;
   await client`ALTER TABLE checkin_guests ADD COLUMN IF NOT EXISTS residence_place_code text`;
   await client`CREATE INDEX IF NOT EXISTS idx_checkin_guests_request ON checkin_guests (request_id)`;
+  await client`CREATE TABLE IF NOT EXISTS checkin_documents (id text PRIMARY KEY,request_id text NOT NULL REFERENCES availability_requests(id) ON DELETE CASCADE,guest_ordinal integer NOT NULL DEFAULT 0,storage_key text NOT NULL,original_name text NOT NULL,content_type text NOT NULL,size integer NOT NULL,uploaded_by text NOT NULL CHECK (uploaded_by IN ('guest','operator')),created_at timestamptz NOT NULL DEFAULT now())`;
+  await client`CREATE INDEX IF NOT EXISTS idx_checkin_documents_request_created ON checkin_documents (request_id,created_at)`;
   await client`CREATE TABLE IF NOT EXISTS availability_events (id text PRIMARY KEY,request_id text NOT NULL REFERENCES availability_requests(id) ON DELETE CASCADE,event_type text NOT NULL,from_status text,to_status text,actor_email text,note text,subject text,body text,amount_cents integer,attachment_id text,attachment_name text,created_at timestamptz NOT NULL DEFAULT now())`;
   await client`ALTER TABLE availability_events ADD COLUMN IF NOT EXISTS attachment_id text`;
   await client`ALTER TABLE availability_events ADD COLUMN IF NOT EXISTS attachment_name text`;
@@ -212,3 +233,4 @@ async function archiveCompletedStays(){await sql`UPDATE availability_requests SE
 async function insertEvent(event:NewAvailabilityEvent){await sql`INSERT INTO availability_events (id,request_id,event_type,from_status,to_status,actor_email,note,subject,body,amount_cents,attachment_id,attachment_name,created_at) VALUES (${event.id??crypto.randomUUID()},${event.requestId},${event.eventType},${event.fromStatus??null},${event.toStatus??null},${event.actorEmail??null},${event.note??null},${event.subject??null},${event.body??null},${event.amountCents??null},${event.attachmentId??null},${event.attachmentName??null},${event.createdAt})`;}
 function mapEventRow(row:Record<string,unknown>):AvailabilityEvent{const iso=(value:unknown)=>value instanceof Date?value.toISOString():String(value);return{id:String(row.id),requestId:String(row.request_id),eventType:String(row.event_type) as AvailabilityEvent["eventType"],fromStatus:row.from_status==null?null:String(row.from_status),toStatus:row.to_status==null?null:String(row.to_status),actorEmail:row.actor_email==null?null:String(row.actor_email),note:row.note==null?null:String(row.note),subject:row.subject==null?null:String(row.subject),body:row.body==null?null:String(row.body),amountCents:row.amount_cents==null?null:Number(row.amount_cents),attachmentId:row.attachment_id==null?null:String(row.attachment_id),attachmentName:row.attachment_name==null?null:String(row.attachment_name),createdAt:iso(row.created_at)};}
 function dateValue(value:unknown){return value instanceof Date?value.toISOString().slice(0,10):String(value).slice(0,10);}
+function mapCheckinDocument(row:Record<string,unknown>):CheckinDocument{return{id:String(row.id),requestId:String(row.request_id),guestOrdinal:Number(row.guest_ordinal),storageKey:String(row.storage_key),originalName:String(row.original_name),contentType:String(row.content_type),size:Number(row.size),uploadedBy:String(row.uploaded_by) as "guest"|"operator",createdAt:row.created_at instanceof Date?row.created_at.toISOString():String(row.created_at)};}

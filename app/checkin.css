@@ -30,6 +30,17 @@
 .checkin-grid label { margin-bottom:24px; }
 .checkin-form input,.checkin-form select { min-height:48px; }
 .checkin-form textarea { width:100%; resize:vertical; border:1px solid var(--line); padding:14px; background:white; color:inherit; font:inherit; }
+.checkin-document { grid-column:1/-1; margin-top:12px; padding:22px; border:1px solid var(--line); background:var(--ivory); }
+.checkin-document h2 { margin:0 0 5px; font-size:24px; }
+.checkin-document > p { margin:0 0 14px; color:#65594f; font-size:13px; }
+.checkin-document label { display:block; margin:0; }
+.checkin-document input[type="file"] { width:100%; min-height:auto; padding:13px; border:1px dashed #b9a895; background:white; }
+.checkin-document > small,.existing-documents small { display:block; margin-top:9px; color:#76685d; line-height:1.45; }
+.checkin-document .document-error { margin:10px 0 0; color:#8b2f22; font-weight:700; }
+.existing-documents { display:grid; gap:8px; margin-top:16px; padding-top:14px; border-top:1px solid var(--line); }
+.existing-documents > span { display:flex; align-items:center; justify-content:space-between; gap:14px; }
+.existing-documents a { color:var(--sea-dark); font-weight:700; }
+.existing-documents button { border:1px solid #a53b2f; border-radius:99px; padding:6px 10px; background:white; color:#8b2f22; cursor:pointer; }
 .field-wide { grid-column:1 / -1; }
 .checkin-actions { display:flex; justify-content:flex-end; gap:14px; border-top:1px solid var(--line); margin-top:28px; padding-top:28px; }
 .button-secondary { border:1px solid var(--line); border-radius:999px; padding:13px 24px; background:transparent; color:var(--brown); cursor:pointer; font-weight:600; }

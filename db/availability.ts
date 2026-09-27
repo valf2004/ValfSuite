@@ -1,5 +1,5 @@
 import { and, asc, desc, eq } from "drizzle-orm";
-import { availabilityEvents, availabilityQuotes, availabilityRequests, checkinGuests, checkinPractices, paymentSubmissions } from "./schema";
+import { availabilityEvents, availabilityQuotes, availabilityRequests, checkinDocuments, checkinGuests, checkinPractices, paymentSubmissions } from "./schema";
 import type { CheckinSubmissionRecord } from "../app/lib/checkin-submission";
 
 export type AvailabilityStatus = "quote_requested" | "quote_sent" | "accepted" | "checked_in" | "police_registered" | "archived";
@@ -16,6 +16,8 @@ export type PaymentConfirmationInput = { requestId:string; amountCents:number; s
 export type GuestCommunicationInput = { requestId:string; eventType:"balance_requested"|"checkin_invited"; subject:string; body:string; note:string; actorEmail:string; paymentTokenHash?:string|null };
 export type PaymentSubmissionInput = { id:string; quoteId:string; requestId:string; method:PaymentMethod; paidAmountCents:number; paidAt:string; paymentReference:string; message:string; receiptKey:string|null; receiptName:string|null; receiptContentType:string|null; receiptSize:number|null; createdAt:string };
 export type AlloggiatiTestAudit={requestId:string;success:boolean;validCount:number;totalCount:number;message:string;details:unknown;actorEmail:string;checkinVersion:number;apartmentId?:string};
+export type CheckinDocument=typeof checkinDocuments.$inferSelect;
+export type CheckinDocumentInput=typeof checkinDocuments.$inferInsert;
 
 const usesPostgres=()=>Boolean(process.env["DATABASE_URL"]?.trim());
 const postgresRepository=()=>import("./availability.postgres");
@@ -88,6 +90,26 @@ export async function getCheckinSubmission(requestId:string){
   const {getDb}=await import(".");const db=getDb();const practices=await db.select().from(checkinPractices).where(eq(checkinPractices.requestId,requestId));const practice=practices[0];if(!practice)return null;
   const guests=await db.select().from(checkinGuests).where(eq(checkinGuests.requestId,requestId)).orderBy(asc(checkinGuests.ordinal));
   return checkinDraft(practice,guests);
+}
+
+export async function listCheckinDocuments(requestId:string):Promise<CheckinDocument[]>{
+  if(usesPostgres())return (await postgresRepository()).listCheckinDocuments(requestId);
+  const {getDb}=await import(".");return getDb().select().from(checkinDocuments).where(eq(checkinDocuments.requestId,requestId)).orderBy(asc(checkinDocuments.createdAt));
+}
+
+export async function replaceCheckinDocuments(requestId:string,documents:CheckinDocumentInput[]){
+  if(usesPostgres())return (await postgresRepository()).replaceCheckinDocuments(requestId,documents);
+  const {getDb}=await import(".");const db=getDb();await db.delete(checkinDocuments).where(eq(checkinDocuments.requestId,requestId));if(documents.length)await db.insert(checkinDocuments).values(documents);return documents;
+}
+
+export async function getCheckinDocument(id:string):Promise<CheckinDocument|null>{
+  if(usesPostgres())return (await postgresRepository()).getCheckinDocument(id);
+  const {getDb}=await import(".");return (await getDb().select().from(checkinDocuments).where(eq(checkinDocuments.id,id)).limit(1))[0]||null;
+}
+
+export async function deleteCheckinDocumentMetadata(id:string):Promise<CheckinDocument|null>{
+  if(usesPostgres())return (await postgresRepository()).deleteCheckinDocumentMetadata(id);
+  const {getDb}=await import(".");return (await getDb().delete(checkinDocuments).where(eq(checkinDocuments.id,id)).returning())[0]||null;
 }
 
 export async function recordAlloggiatiTestResult(input:AlloggiatiTestAudit){
