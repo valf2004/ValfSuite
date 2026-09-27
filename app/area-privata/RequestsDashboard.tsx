@@ -241,7 +241,7 @@ function formatDateTime(value:string){return new Intl.DateTimeFormat("it-IT",{da
 function formatCurrency(value:number){return new Intl.NumberFormat("it-IT",{style:"currency",currency:"EUR"}).format(value/100);}
 function nights(arrival:string,departure:string){return Math.round((Date.parse(`${departure}T12:00:00Z`)-Date.parse(`${arrival}T12:00:00Z`))/86_400_000);}
 function outcomeLabel(value:ArchiveOutcome){return {completed:"Completata",cancelled:"Annullata",unavailable:"Mancanza disponibilità"}[value];}
-function matchesTab(item:AvailabilityRequest,tab:TabId){return tab==="payment_reported"?item.paymentStatus==="reported":item.status===tab;}
+function matchesTab(item:AvailabilityRequest,tab:TabId){return tab==="payment_reported"?item.paymentStatus==="reported"&&item.status!=="archived":item.status===tab;}
 function isDirectStay(item:AvailabilityRequest){return item.sourceRequestId===null&&item.relationReason==="new_stay";}
 function compareStayPeriod(a:AvailabilityRequest,b:AvailabilityRequest){return a.arrivalDate.localeCompare(b.arrivalDate)||a.departureDate.localeCompare(b.departureDate)||a.name.localeCompare(b.name,"it");}
 function statusLabel(value:string){return ({quote_requested:"Richiesta preventivo",quote_sent:"Preventivo inviato",payment_reported:"Pagamento comunicato",accepted:"Accettata",checked_in:"Check-in eseguito",police_registered:"Questura registrata",archived:"Archiviata"} as Record<string,string>)[value]||value;}

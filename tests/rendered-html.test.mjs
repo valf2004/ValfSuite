@@ -323,6 +323,7 @@ test("keeps payment progress separate from booking status", async () => {
   assert.match(confirmation,/item\.paymentStatus!=="reported"/);
   assert.match(dashboard,/matchesTab\(item,active\)/);
   assert.match(dashboard,/item\.paymentStatus==="reported"/);
+  assert.match(dashboard,/item\.paymentStatus==="reported"&&item\.status!=="archived"/);
   assert.match(dashboard,/Stato prenotazione/);
   assert.doesNotMatch(statusRoute,/const statuses = \[[^\]]*payment_reported/);
   assert.match(paymentRoute,/paymentStatus:"reported"/);
