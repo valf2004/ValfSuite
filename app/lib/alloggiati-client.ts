@@ -39,6 +39,20 @@ export async function sendAlloggiatiRecords(records:string[],apartmentId?:string
   return parseTestResponse(await soap(action,body),action,records.length);
 }
 
+export async function downloadAlloggiatiReceipt(date:string):Promise<Uint8Array>{
+  if(!/^\d{4}-\d{2}-\d{2}$/.test(date))throw new Error("La data della ricevuta non è valida.");
+  const user=required("ALLOGGIATI_USER"),password=required("ALLOGGIATI_PASSWORD"),wsKey=required("ALLOGGIATI_WSKEY");
+  const token=await generateToken(user,password,wsKey);
+  const body=`<Ricevuta xmlns="AlloggiatiService"><Utente>${xml(user)}</Utente><token>${xml(token)}</token><Data>${xml(date)}T00:00:00</Data></Ricevuta>`;
+  const response=await soap("Ricevuta",body);const resultBlock=block(response,"RicevutaResult");
+  if(!/^(true|1)$/i.test(tag(resultBlock,"esito")))throw new Error(serviceError(resultBlock)||"La ricevuta Alloggiati Web non è disponibile.");
+  const encoded=tag(response,"PDF").replace(/\s+/g,"");if(!encoded)throw new Error("Alloggiati Web non ha restituito il PDF della ricevuta.");
+  let binary:string;try{binary=atob(encoded);}catch{throw new Error("La ricevuta restituita da Alloggiati Web non è un PDF valido.");}
+  const bytes=Uint8Array.from(binary,char=>char.charCodeAt(0));
+  if(bytes.length<5||String.fromCharCode(...bytes.slice(0,5))!=="%PDF-")throw new Error("La ricevuta restituita da Alloggiati Web non è un PDF valido.");
+  return bytes;
+}
+
 async function generateToken(user:string,password:string,wsKey:string){
   const body=`<GenerateToken xmlns="AlloggiatiService"><Utente>${xml(user)}</Utente><Password>${xml(password)}</Password><WsKey>${xml(wsKey)}</WsKey></GenerateToken>`;
   const response=await soap("GenerateToken",body);const token=tag(response,"token");if(!token)throw new Error(serviceError(response)||"Alloggiati Web non ha restituito un token.");return token;

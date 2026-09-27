@@ -633,14 +633,15 @@ test("imports and applies the official Alloggiati reference tables", async () =>
   assert.match(migration,/synced_at/);
 });
 
-test("tests and sends Alloggiati Web records with guarded reconciliation", async () => {
-  const [dashboard,page,form,route,sendRoute,resolveRoute,records,client,repository,postgres,schema,upload,migration,apartmentMigration]=await Promise.all([
+test("tests, sends and downloads Alloggiati Web receipts with guarded reconciliation", async () => {
+  const [dashboard,page,form,route,sendRoute,resolveRoute,receiptRoute,records,client,repository,postgres,schema,upload,migration,apartmentMigration]=await Promise.all([
     source("app/area-privata/RequestsDashboard.tsx"),
     source("app/area-riservata/alloggiati/[id]/page.tsx"),
     source("app/area-privata/AlloggiatiTestForm.tsx"),
     source("app/api/gestione/alloggiati/test/[id]/route.ts"),
     source("app/api/gestione/alloggiati/send/[id]/route.ts"),
     source("app/api/gestione/alloggiati/send/[id]/resolve/route.ts"),
+    source("app/api/gestione/alloggiati/ricevuta/[id]/route.ts"),
     source("app/lib/alloggiati-record.ts"),
     source("app/lib/alloggiati-client.ts"),
     source("db/availability.ts"),
@@ -651,6 +652,7 @@ test("tests and sends Alloggiati Web records with guarded reconciliation", async
     source("drizzle/0016_tidy_umar.sql"),
   ]);
   assert.match(dashboard,/Prepara Alloggiati/);
+  assert.match(dashboard,/Ricevuta Alloggiati/);
   assert.match(page,/buildAlloggiatiRecords/);
   assert.match(form,/Invia test/);
   assert.match(form,/Invia definitivamente/);
@@ -658,6 +660,7 @@ test("tests and sends Alloggiati Web records with guarded reconciliation", async
   assert.match(form,/Nessuna schedina acquisita/);
   assert.match(form,/alloggiati-guest-card/);
   assert.match(form,/window\.location\.assign/);
+  assert.match(form,/Scarica ricevuta PDF/);
   assert.match(route,/privateUserFromCookie/);
   assert.match(route,/item\.status!=="checked_in"/);
   assert.match(records,/record\.length!==168/);
@@ -666,6 +669,7 @@ test("tests and sends Alloggiati Web records with guarded reconciliation", async
   assert.match(client,/GestioneAppartamenti_Test/);
   assert.match(client,/GestioneAppartamenti_Send/);
   assert.match(client,/sendAlloggiatiRecords/);
+  assert.match(client,/downloadAlloggiatiReceipt/);
   assert.match(client,/AlloggiatiService\/\$\{action\}/);
   assert.match(sendRoute,/beginAlloggiatiSend/);
   assert.match(sendRoute,/requiresReconciliation/);
@@ -673,6 +677,10 @@ test("tests and sends Alloggiati Web records with guarded reconciliation", async
   assert.match(sendRoute,/if\(!recorded\)/);
   assert.match(resolveRoute,/resolveAlloggiatiSendAttempt/);
   assert.match(resolveRoute,/SCHEDINE ACQUISITE/);
+  assert.match(receiptRoute,/application\/pdf/);
+  assert.match(receiptRoute,/age<1/);
+  assert.match(receiptRoute,/age>30/);
+  assert.match(receiptRoute,/privateUserFromCookie/);
   assert.match(repository,/recordAlloggiatiTestResult/);
   assert.match(repository,/beginAlloggiatiSend/);
   assert.match(postgres,/recordAlloggiatiTestResult/);
