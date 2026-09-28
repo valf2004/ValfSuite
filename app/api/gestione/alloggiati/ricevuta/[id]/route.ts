@@ -9,7 +9,8 @@ export async function GET(_request:Request,{params}:{params:Promise<{id:string}>
   const requestHeaders=await headers();const user=await privateUserFromCookie(requestHeaders.get("cookie"));
   if(!user)return new Response(null,{status:303,headers:{Location:"/area-riservata?sessione=scaduta"}});
   const {id}=await params;const item=(await listAvailabilityRequests()).find(row=>row.id===id);
-  if(!item||item.status!=="police_registered")return Response.json({message:"La pratica non risulta ancora registrata in Questura."},{status:404});
+  const receiptEligible=item?.status==="police_registered"||(item?.status==="archived"&&item.archiveOutcome==="completed");
+  if(!item||!receiptEligible)return Response.json({message:"La pratica non risulta ancora registrata in Questura."},{status:404});
   const draft=await getCheckinSubmission(id);if(!draft?.sendAttemptedAt||draft.state!=="sent")return Response.json({message:"Non è disponibile una data di invio Alloggiati Web per questa pratica."},{status:409});
   const receiptDate=dateInRome(draft.sendAttemptedAt),today=dateInRome(new Date());const age=daysBetween(receiptDate,today);
   if(age<1)return Response.json({message:"La ricevuta sarà disponibile dal giorno successivo all’invio."},{status:409});

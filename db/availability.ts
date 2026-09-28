@@ -31,9 +31,7 @@ export async function createAvailabilityRequest(record:NewAvailabilityRecord){
 
 export async function listAvailabilityRequests(status?:AvailabilityStatus){
   if(usesPostgres())return (await postgresRepository()).listAvailabilityRequests(status);
-  const {getDb}=await import(".");const db=getDb();const today=new Date().toISOString().slice(0,10);
-  const completed=await db.select().from(availabilityRequests).where(eq(availabilityRequests.status,"police_registered"));
-  await Promise.all(completed.filter(item=>item.departureDate<today).map(item=>db.update(availabilityRequests).set({status:"archived",archiveOutcome:"completed",updatedAt:new Date().toISOString()}).where(eq(availabilityRequests.id,item.id))));
+  const {getDb}=await import(".");const db=getDb();
   return status?db.select().from(availabilityRequests).where(eq(availabilityRequests.status,status)).orderBy(desc(availabilityRequests.createdAt)):db.select().from(availabilityRequests).orderBy(desc(availabilityRequests.createdAt));
 }
 

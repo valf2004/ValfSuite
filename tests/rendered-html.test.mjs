@@ -94,7 +94,8 @@ test("models the complete booking workflow and archive outcomes", async () => {
   const [schema, dashboard, postgresRepository, migration] = await Promise.all([source("db/schema.ts"), source("app/area-privata/RequestsDashboard.tsx"), source("db/availability.postgres.ts"), source("drizzle/0001_booking_workflow.sql")]);
   for (const status of ["quote_requested","quote_sent","accepted","checked_in","police_registered","archived"]) assert.match(schema,new RegExp(status));
   for (const outcome of ["completed","cancelled","unavailable"]) assert.match(dashboard,new RegExp(outcome));
-  assert.match(postgresRepository,/departure_date < CURRENT_DATE/);
+  assert.doesNotMatch(postgresRepository,/departure_date < CURRENT_DATE/);
+  assert.match(dashboard,/archived:completed/);
   assert.match(migration,/archive_outcome/);
 });
 
@@ -653,6 +654,7 @@ test("tests, sends and downloads Alloggiati Web receipts with guarded reconcilia
   ]);
   assert.match(dashboard,/Prepara Alloggiati/);
   assert.match(dashboard,/Ricevuta Alloggiati/);
+  assert.match(dashboard,/archiveOutcome==="completed"/);
   assert.match(page,/buildAlloggiatiRecords/);
   assert.match(form,/Invia test/);
   assert.match(form,/Invia definitivamente/);
@@ -686,6 +688,7 @@ test("tests, sends and downloads Alloggiati Web receipts with guarded reconcilia
   assert.match(receiptRoute,/age<1/);
   assert.match(receiptRoute,/age>30/);
   assert.match(receiptRoute,/privateUserFromCookie/);
+  assert.match(receiptRoute,/receiptEligible/);
   assert.match(repository,/recordAlloggiatiTestResult/);
   assert.match(repository,/beginAlloggiatiSend/);
   assert.match(postgres,/recordAlloggiatiTestResult/);
