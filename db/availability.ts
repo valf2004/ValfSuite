@@ -1,5 +1,5 @@
 import { and, asc, desc, eq, isNull } from "drizzle-orm";
-import { availabilityEvents, availabilityQuotes, availabilityRequests, checkinDocuments, checkinGuests, checkinPractices, paymentSubmissions } from "./schema";
+import { alloggiatiReceipts, availabilityEvents, availabilityQuotes, availabilityRequests, checkinDocuments, checkinGuests, checkinPractices, paymentSubmissions } from "./schema";
 import type { CheckinSubmissionRecord } from "../app/lib/checkin-submission";
 
 export type AvailabilityStatus = "quote_requested" | "quote_sent" | "accepted" | "checked_in" | "police_registered" | "archived";
@@ -20,6 +20,7 @@ export type AlloggiatiSendAudit={requestId:string;success:boolean;validCount:num
 export type AlloggiatiSendResolution="received"|"not_received";
 export type CheckinDocument=typeof checkinDocuments.$inferSelect;
 export type CheckinDocumentInput=typeof checkinDocuments.$inferInsert;
+export type AlloggiatiReceipt=typeof alloggiatiReceipts.$inferSelect;
 
 const usesPostgres=()=>Boolean(process.env["DATABASE_URL"]?.trim());
 const postgresRepository=()=>import("./availability.postgres");
@@ -163,6 +164,16 @@ export async function getPaymentReceipt(id:string){
   if(usesPostgres())return (await postgresRepository()).getPaymentReceipt(id);
   const {getDb}=await import(".");const rows=await getDb().select({key:paymentSubmissions.receiptKey,name:paymentSubmissions.receiptName,contentType:paymentSubmissions.receiptContentType,size:paymentSubmissions.receiptSize}).from(paymentSubmissions).where(eq(paymentSubmissions.id,id)).limit(1);const row=rows[0];
   return !row?.key?null:{key:row.key,name:row.name||"ricevuta",contentType:row.contentType||"application/octet-stream",size:row.size};
+}
+
+export async function getAlloggiatiReceipt(receiptDate:string):Promise<AlloggiatiReceipt|null>{
+  if(usesPostgres())return (await postgresRepository()).getAlloggiatiReceipt(receiptDate);
+  const {getDb}=await import(".");return (await getDb().select().from(alloggiatiReceipts).where(eq(alloggiatiReceipts.receiptDate,receiptDate)).limit(1))[0]||null;
+}
+
+export async function saveAlloggiatiReceipt(receipt:AlloggiatiReceipt):Promise<AlloggiatiReceipt>{
+  if(usesPostgres())return (await postgresRepository()).saveAlloggiatiReceipt(receipt);
+  const {getDb}=await import(".");const rows=await getDb().insert(alloggiatiReceipts).values(receipt).onConflictDoUpdate({target:alloggiatiReceipts.receiptDate,set:{storageKey:receipt.storageKey,contentType:receipt.contentType,size:receipt.size,archivedAt:receipt.archivedAt}}).returning();return rows[0];
 }
 
 export async function recordAvailabilityEvent(event:NewAvailabilityEvent){

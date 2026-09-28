@@ -1,5 +1,5 @@
 import postgres, { type Sql } from "postgres";
-import { availabilityEvents, availabilityRequests, checkinDocuments } from "./schema";
+import { alloggiatiReceipts, availabilityEvents, availabilityRequests, checkinDocuments } from "./schema";
 import type { CheckinSubmissionRecord } from "../app/lib/checkin-submission";
 
 export type AvailabilityStatus = "quote_requested" | "quote_sent" | "accepted" | "checked_in" | "police_registered" | "archived";
@@ -28,6 +28,7 @@ export type AlloggiatiSendAudit={requestId:string;success:boolean;validCount:num
 export type AlloggiatiSendResolution="received"|"not_received";
 export type CheckinDocument=typeof checkinDocuments.$inferSelect;
 export type CheckinDocumentInput=typeof checkinDocuments.$inferInsert;
+export type AlloggiatiReceipt=typeof alloggiatiReceipts.$inferSelect;
 
 const url = process.env["DATABASE_URL"];
 if (!url) throw new Error("DATABASE_URL is required in the Docker runtime");
@@ -176,6 +177,14 @@ export async function getPaymentReceipt(id:string) {
   return {key:String(rows[0].receipt_key),name:String(rows[0].receipt_name||"ricevuta"),contentType:String(rows[0].receipt_content_type||"application/octet-stream"),size:rows[0].receipt_size==null?null:Number(rows[0].receipt_size)};
 }
 
+export async function getAlloggiatiReceipt(receiptDate:string):Promise<AlloggiatiReceipt|null>{
+  await ready();const rows=await sql`SELECT * FROM alloggiati_receipts WHERE receipt_date=${receiptDate} LIMIT 1`;return rows[0]?mapAlloggiatiReceipt(rows[0]):null;
+}
+
+export async function saveAlloggiatiReceipt(receipt:AlloggiatiReceipt):Promise<AlloggiatiReceipt>{
+  await ready();const rows=await sql`INSERT INTO alloggiati_receipts (receipt_date,storage_key,content_type,size,archived_at) VALUES (${receipt.receiptDate},${receipt.storageKey},${receipt.contentType},${receipt.size},${receipt.archivedAt}) ON CONFLICT (receipt_date) DO UPDATE SET storage_key=EXCLUDED.storage_key,content_type=EXCLUDED.content_type,size=EXCLUDED.size,archived_at=EXCLUDED.archived_at RETURNING *`;return mapAlloggiatiReceipt(rows[0]);
+}
+
 export async function recordAvailabilityEvent(event:NewAvailabilityEvent){await ready();await insertEvent(event);return event;}
 export async function listAvailabilityEvents(){await ready();const rows=await sql`SELECT * FROM availability_events ORDER BY created_at ASC`;return rows.map(mapEventRow);}
 
@@ -214,6 +223,7 @@ async function initializePostgres(client: Sql) {
   await client`CREATE INDEX IF NOT EXISTS idx_checkin_guests_request ON checkin_guests (request_id)`;
   await client`CREATE TABLE IF NOT EXISTS checkin_documents (id text PRIMARY KEY,request_id text NOT NULL REFERENCES availability_requests(id) ON DELETE CASCADE,guest_ordinal integer NOT NULL DEFAULT 0,storage_key text NOT NULL,original_name text NOT NULL,content_type text NOT NULL,size integer NOT NULL,uploaded_by text NOT NULL CHECK (uploaded_by IN ('guest','operator')),created_at timestamptz NOT NULL DEFAULT now())`;
   await client`CREATE INDEX IF NOT EXISTS idx_checkin_documents_request_created ON checkin_documents (request_id,created_at)`;
+  await client`CREATE TABLE IF NOT EXISTS alloggiati_receipts (receipt_date date PRIMARY KEY,storage_key text NOT NULL,content_type text NOT NULL DEFAULT 'application/pdf',size integer NOT NULL,archived_at timestamptz NOT NULL DEFAULT now())`;
   await client`CREATE TABLE IF NOT EXISTS availability_events (id text PRIMARY KEY,request_id text NOT NULL REFERENCES availability_requests(id) ON DELETE CASCADE,event_type text NOT NULL,from_status text,to_status text,actor_email text,note text,subject text,body text,amount_cents integer,attachment_id text,attachment_name text,created_at timestamptz NOT NULL DEFAULT now())`;
   await client`ALTER TABLE availability_events ADD COLUMN IF NOT EXISTS attachment_id text`;
   await client`ALTER TABLE availability_events ADD COLUMN IF NOT EXISTS attachment_name text`;
@@ -253,3 +263,4 @@ async function insertEvent(event:NewAvailabilityEvent){await sql`INSERT INTO ava
 function mapEventRow(row:Record<string,unknown>):AvailabilityEvent{const iso=(value:unknown)=>value instanceof Date?value.toISOString():String(value);return{id:String(row.id),requestId:String(row.request_id),eventType:String(row.event_type) as AvailabilityEvent["eventType"],fromStatus:row.from_status==null?null:String(row.from_status),toStatus:row.to_status==null?null:String(row.to_status),actorEmail:row.actor_email==null?null:String(row.actor_email),note:row.note==null?null:String(row.note),subject:row.subject==null?null:String(row.subject),body:row.body==null?null:String(row.body),amountCents:row.amount_cents==null?null:Number(row.amount_cents),attachmentId:row.attachment_id==null?null:String(row.attachment_id),attachmentName:row.attachment_name==null?null:String(row.attachment_name),createdAt:iso(row.created_at)};}
 function dateValue(value:unknown){return value instanceof Date?value.toISOString().slice(0,10):String(value).slice(0,10);}
 function mapCheckinDocument(row:Record<string,unknown>):CheckinDocument{return{id:String(row.id),requestId:String(row.request_id),guestOrdinal:Number(row.guest_ordinal),storageKey:String(row.storage_key),originalName:String(row.original_name),contentType:String(row.content_type),size:Number(row.size),uploadedBy:String(row.uploaded_by) as "guest"|"operator",createdAt:row.created_at instanceof Date?row.created_at.toISOString():String(row.created_at)};}
+function mapAlloggiatiReceipt(row:Record<string,unknown>):AlloggiatiReceipt{return{receiptDate:dateValue(row.receipt_date),storageKey:String(row.storage_key),contentType:String(row.content_type||"application/pdf"),size:Number(row.size),archivedAt:row.archived_at instanceof Date?row.archived_at.toISOString():String(row.archived_at)};}

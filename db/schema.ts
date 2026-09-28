@@ -111,6 +111,14 @@ export const checkinDocuments = sqliteTable("checkin_documents", {
   index("idx_checkin_documents_request_created").on(table.requestId, table.createdAt),
 ]);
 
+export const alloggiatiReceipts = sqliteTable("alloggiati_receipts", {
+  receiptDate: text("receipt_date").primaryKey(),
+  storageKey: text("storage_key").notNull(),
+  contentType: text("content_type").notNull().default("application/pdf"),
+  size: integer("size").notNull(),
+  archivedAt: text("archived_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+});
+
 export const availabilityEvents = sqliteTable("availability_events", {
   id: text("id").primaryKey(),
   requestId: text("request_id").notNull().references(() => availabilityRequests.id, { onDelete: "cascade" }),

@@ -1,7 +1,7 @@
 import type {Metadata} from "next";
 import Link from "next/link";
 import {headers} from "next/headers";
-import {getCheckinSubmission,listAvailabilityRequests} from "../../../../db/availability";
+import {getAlloggiatiReceipt,getCheckinSubmission,listAvailabilityRequests} from "../../../../db/availability";
 import {listAlloggiatiLookupValues} from "../../../../db/alloggiati-lookups";
 import {PrivateHeader,PrivateLogin} from "../../../area-privata/PrivateChrome";
 import {AlloggiatiTestForm} from "../../../area-privata/AlloggiatiTestForm";
@@ -23,10 +23,11 @@ export default async function AlloggiatiPage({params}:{params:Promise<{id:string
   const apartments=lookups.filter(row=>row.tableName==="ListaAppartamenti").map(row=>({id:row.itemKey,label:`${row.itemValue} · ${row.itemKey}`}));
   const defaultApartmentId=(process.env["ALLOGGIATI_APARTMENT_ID"]||"").trim();
   const configured=Boolean(process.env["ALLOGGIATI_USER"]?.trim()&&process.env["ALLOGGIATI_PASSWORD"]?.trim()&&process.env["ALLOGGIATI_WSKEY"]?.trim()&&(accountMode==="standard"||defaultApartmentId||apartments.length));
-  const receipt=receiptAvailability(draft.sendAttemptedAt);
-  return <main className="dashboard-page"><PrivateHeader user={user} active="requests"/><AlloggiatiTestForm requestId={id} guestName={item.name} arrivalDate={item.arrivalDate} departureDate={item.departureDate} preview={preview} accountMode={accountMode} apartments={apartments} defaultApartmentId={defaultApartmentId} configured={configured} initialState={draft.state} initialError={draft.lastError} initialValidatedApartmentId={draft.validatedApartmentId} initialSendAttemptedAt={draft.sendAttemptedAt} receiptDate={receipt.date} receiptStatus={receipt.status}/></main>;
+  const receiptDate=dateInRome(draft.sendAttemptedAt);const archivedReceipt=receiptDate?await getAlloggiatiReceipt(receiptDate):null;const receipt=receiptAvailability(draft.sendAttemptedAt,Boolean(archivedReceipt));
+  return <main className="dashboard-page"><PrivateHeader user={user} active="requests"/><AlloggiatiTestForm requestId={id} guestName={item.name} arrivalDate={item.arrivalDate} departureDate={item.departureDate} preview={preview} accountMode={accountMode} apartments={apartments} defaultApartmentId={defaultApartmentId} configured={configured} initialState={draft.state} initialError={draft.lastError} initialValidatedApartmentId={draft.validatedApartmentId} initialSendAttemptedAt={draft.sendAttemptedAt} receiptDate={receipt.date} receiptStatus={receipt.status} receiptArchivedAt={archivedReceipt?.archivedAt}/></main>;
 }
 
-function receiptAvailability(attemptedAt?:string|null):{date:string;status:"available"|"pending"|"expired"|"missing"}{
-  if(!attemptedAt)return {date:"",status:"missing"};const zone="Europe/Rome";const formatter=new Intl.DateTimeFormat("en-CA",{timeZone:zone,year:"numeric",month:"2-digit",day:"2-digit"});const date=formatter.format(new Date(attemptedAt)),today=formatter.format(new Date());const age=Math.round((Date.parse(`${today}T12:00:00Z`)-Date.parse(`${date}T12:00:00Z`))/86_400_000);return {date,status:age<1?"pending":age>30?"expired":"available"};
+function receiptAvailability(attemptedAt?:string|null,archived=false):{date:string;status:"archived"|"available"|"pending"|"expired"|"missing"}{
+  if(!attemptedAt)return {date:"",status:"missing"};const date=dateInRome(attemptedAt);if(archived)return {date,status:"archived"};const today=dateInRome(new Date());const age=Math.round((Date.parse(`${today}T12:00:00Z`)-Date.parse(`${date}T12:00:00Z`))/86_400_000);return {date,status:age<1?"pending":age>30?"expired":"available"};
 }
+function dateInRome(value?:string|Date|null){return value?new Intl.DateTimeFormat("en-CA",{timeZone:"Europe/Rome",year:"numeric",month:"2-digit",day:"2-digit"}).format(typeof value==="string"?new Date(value):value):"";}
