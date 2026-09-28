@@ -664,6 +664,8 @@ test("tests, sends and downloads Alloggiati Web receipts with guarded reconcilia
   assert.match(form,/Invio riuscito: schedine acquisite/);
   assert.match(form,/Invio acquisito da Alloggiati Web/);
   assert.match(form,/scrollIntoView/);
+  assert.match(form,/<a href=\{\x60\/area-riservata\/ross1000/);
+  assert.match(form,/<a href="\/area-riservata">Torna alle richieste<\/a>/);
   assert.match(route,/privateUserFromCookie/);
   assert.match(route,/item\.status!=="checked_in"/);
   assert.match(records,/record\.length!==168/);
@@ -712,6 +714,7 @@ test("produces a locally validated Ross1000 arrival XML without enabling automat
   const [page,route,form,schema,migration]=await Promise.all([source("app/area-riservata/ross1000/[id]/page.tsx"),source("app/api/gestione/ross1000/xml/[id]/route.ts"),source("app/checkin/GuestCheckin.tsx"),source("db/schema.ts"),source("drizzle/0012_noisy_mattie_franklin.sql")]);
   assert.match(page,/Importa file gestionale/);
   assert.match(page,/Invio automatico · non attivo/);
+  assert.match(page,/\["checked_in","police_registered"\]\.includes\(item\.status\)/);
   assert.match(route,/application\/xml/);
   assert.match(route,/privateUserFromCookie/);
   assert.match(form,/residenceCountry/);

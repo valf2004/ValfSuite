@@ -12,7 +12,7 @@ export default async function Ross1000Page({params}:{params:Promise<{id:string}>
   const requestHeaders=await headers();const user=await privateUserFromCookie(requestHeaders.get("cookie"));
   if(!user)return <PrivateLogin configured={authIsConfigured()}/>;
   const {id}=await params;const item=(await listAvailabilityRequests()).find(row=>row.id===id);
-  if(!item||item.status!=="checked_in")return <Unavailable user={user} title="XML non disponibile" message="Completa il check-in prima di produrre il file Ross1000."/>;
+  if(!item||!["checked_in","police_registered"].includes(item.status))return <Unavailable user={user} title="XML non disponibile" message="Completa il check-in prima di produrre il file Ross1000."/>;
   const draft=await getCheckinSubmission(id);
   if(!draft)return <Unavailable user={user} title="Check-in incompleto" message="Completa i dati degli ospiti prima di produrre il file XML." edit={id}/>;
   let preview;
