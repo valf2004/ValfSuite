@@ -399,7 +399,7 @@
 .alloggiati-title > span { border-radius:999px; padding:10px 16px; font-size:12px; font-weight:700; white-space:nowrap; background:#efe5d8; color:#755f49; }
 .alloggiati-title > span.validated { background:#dceee8; color:#175f55; }
 .alloggiati-title > span.warning { background:#fff0ce; color:#76571a; }
-.alloggiati-summary { display:grid; grid-template-columns:1.2fr 1fr .7fr; background:white; border:1px solid #e1d8ce; box-shadow:0 20px 55px rgba(61,48,37,.06); margin-bottom:28px; }
+.alloggiati-summary { display:grid; grid-template-columns:1.25fr repeat(4,minmax(0,.72fr)); background:white; border:1px solid #e1d8ce; box-shadow:0 20px 55px rgba(61,48,37,.06); margin-bottom:28px; }
 .alloggiati-summary > div { padding:25px 28px; display:flex; flex-direction:column; border-right:1px solid #ece3d9; }
 .alloggiati-summary > div:last-child { border-right:0; }
 .alloggiati-summary small { color:#8a7460; text-transform:uppercase; letter-spacing:.12em; }
@@ -408,7 +408,7 @@
 .alloggiati-apartment { max-width:560px; margin-bottom:28px; }
 .alloggiati-apartment span { display:block; margin-top:7px; }
 .alloggiati-table-wrap { overflow:auto; background:white; border:1px solid #e1d8ce; }
-.alloggiati-table { width:100%; border-collapse:collapse; min-width:900px; }
+.alloggiati-table { width:100%; border-collapse:collapse; min-width:760px; }
 .alloggiati-table th,.alloggiati-table td { padding:15px 16px; border-bottom:1px solid #ece3d9; text-align:left; vertical-align:top; }
 .alloggiati-table th { color:#755f49; text-transform:uppercase; letter-spacing:.1em; font-size:11px; }
 .alloggiati-table td { font-size:14px; color:#49392c; }
@@ -425,9 +425,9 @@
 .alloggiati-guest-card dl > div { min-width:0; padding:10px 12px; background:white; }
 .alloggiati-guest-card dt { margin-bottom:3px; color:#806e5e; font-size:9px; font-weight:700; letter-spacing:.07em; text-transform:uppercase; }
 .alloggiati-guest-card dd { margin:0; overflow-wrap:anywhere; color:#49392c; font-size:12px; line-height:1.35; }
-.alloggiati-records { margin-top:18px; border:1px solid #ddd1c4; background:#f2eadf; padding:16px 20px; }
-.alloggiati-records summary { cursor:pointer; color:#49392c; font-weight:700; }
-.alloggiati-records pre { white-space:pre; overflow:auto; background:#302921; color:#f7f2ea; padding:16px; font-size:11px; }
+.alloggiati-records { margin-top:10px; color:#8a7d72; font-size:11px; text-align:right; }
+.alloggiati-records summary { display:inline-block; cursor:pointer; color:#8a7d72; font-weight:500; }
+.alloggiati-records pre { margin:8px 0 0; white-space:pre; overflow:auto; background:#302921; color:#f7f2ea; padding:14px; font-size:10px; text-align:left; }
 .alloggiati-records pre span { display:block; color:#b5d8d4; margin-bottom:8px; }
 .alloggiati-notice,.alloggiati-result { margin-top:24px; padding:20px 22px; border-radius:8px; display:flex; flex-direction:column; gap:5px; }
 .alloggiati-feedback:empty { display:none; }
@@ -475,6 +475,11 @@
 .ross-validation p span { display:grid; place-items:center; width:22px; height:22px; border-radius:50%; background:#dceee8; }
 .ross-validation small { color:#76685d; line-height:1.5; }
 .ross-xml pre { max-height:460px; overflow:auto; white-space:pre; }
+@media (max-width:1050px) and (min-width:761px) {
+  .alloggiati-summary { grid-template-columns:repeat(3,minmax(0,1fr)); }
+  .alloggiati-summary > div:nth-child(3) { border-right:0; }
+  .alloggiati-summary > div:nth-child(-n+3) { border-bottom:1px solid #ece3d9; }
+}
 @media (max-width:760px) {
   .alloggiati-workspace { padding:38px 18px 75px; }
   .alloggiati-title { flex-direction:column; gap:12px; }

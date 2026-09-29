@@ -615,6 +615,9 @@ test("imports and applies the official Alloggiati reference tables", async () =>
   assert.match(route,/privateUserFromCookie/);
   assert.match(settings,/Aggiorna tabelle Alloggiati/);
   assert.match(form,/alloggiati-places/);
+  assert.match(form,/PlaceReferenceField/);
+  assert.match(form,/value=\{option\.itemValue\}/);
+  assert.match(form,/selected\?\.itemKey/);
   assert.match(form,/<option value="1">/);
   assert.match(form,/<option value="2">/);
   assert.match(form,/validateCurrentLookups/);
@@ -666,6 +669,11 @@ test("tests, sends, archives and displays Alloggiati Web receipts with guarded r
   assert.match(form,/INVIO DEFINITIVO/);
   assert.match(form,/Nessuna schedina acquisita/);
   assert.match(form,/alloggiati-guest-card/);
+  assert.match(form,/<small>Check-in<\/small>/);
+  assert.match(form,/<small>Check-out<\/small>/);
+  assert.match(form,/giorni di soggiorno/);
+  assert.doesNotMatch(form,/<th>Tracciato<\/th>/);
+  assert.match(form,/<summary>Dettagli tecnici<\/summary>/);
   assert.match(form,/window\.location\.assign/);
   assert.match(form,/Archivia ricevuta/);
   assert.match(form,/Visualizza ricevuta/);
