@@ -32,7 +32,7 @@ export default function RequestsDashboard({ initialRequests, initialEvents, toda
   const [requests, setRequests] = useState(initialRequests);
   const [events, setEvents] = useState(initialEvents);
   const [active, setActive] = useState<TabId>("quote_requested");
-  const [archiveFilter, setArchiveFilter] = useState<"all" | ArchiveOutcome>("all");
+  const [archiveFilter, setArchiveFilter] = useState<"all" | ArchiveOutcome>("completed");
   const [busy, setBusy] = useState<string | null>(null);
   const [notice, setNotice] = useState("");
   const [quoteFor, setQuoteFor] = useState<string | null>(null);
@@ -46,7 +46,7 @@ export default function RequestsDashboard({ initialRequests, initialEvents, toda
   const [directOpen,setDirectOpen]=useState(false);
   const [directDraft,setDirectDraft]=useState(emptyDirectDraft);
   const [directConflicts,setDirectConflicts]=useState<MoveResult["conflicts"]>(undefined);
-  const visible = useMemo(() => requests.filter(item => matchesTab(item,active) && !(active === "archived" && archiveFilter !== "all" && item.archiveOutcome !== archiveFilter)).sort(compareStayPeriod), [requests, active, archiveFilter]);
+  const visible = useMemo(() => requests.filter(item => matchesTab(item,active) && !(active === "archived" && archiveFilter !== "all" && item.archiveOutcome !== archiveFilter)).sort(active==="archived"?compareArchivedRecent:compareStayPeriod), [requests, active, archiveFilter]);
   async function move(id: string, status: Status, archiveOutcome?: ArchiveOutcome, note?:string, force=false):Promise<MoveResult> {
     setBusy(id); setNotice("");
     try{
@@ -244,6 +244,7 @@ function outcomeLabel(value:ArchiveOutcome){return {completed:"Completata",cance
 function matchesTab(item:AvailabilityRequest,tab:TabId){return tab==="payment_reported"?item.paymentStatus==="reported"&&item.status!=="archived":item.status===tab;}
 function isDirectStay(item:AvailabilityRequest){return item.sourceRequestId===null&&item.relationReason==="new_stay";}
 function compareStayPeriod(a:AvailabilityRequest,b:AvailabilityRequest){return a.arrivalDate.localeCompare(b.arrivalDate)||a.departureDate.localeCompare(b.departureDate)||a.name.localeCompare(b.name,"it");}
+function compareArchivedRecent(a:AvailabilityRequest,b:AvailabilityRequest){return b.updatedAt.localeCompare(a.updatedAt)||b.departureDate.localeCompare(a.departureDate)||a.name.localeCompare(b.name,"it");}
 function statusLabel(value:string){return ({quote_requested:"Richiesta preventivo",quote_sent:"Preventivo inviato",payment_reported:"Pagamento comunicato",accepted:"Accettata",checked_in:"Check-in eseguito",police_registered:"Questura registrata",archived:"Archiviata"} as Record<string,string>)[value]||value;}
 function paymentLabel(value:PaymentStatus){return ({unpaid:"Pagamento da ricevere",reported:"Pagamento da verificare",partial:"Acconto ricevuto",paid:"Saldato"} as Record<PaymentStatus,string>)[value];}
 function eventTitle(event:AvailabilityEvent){if(event.eventType==="request_created")return "Richiesta ricevuta";if(event.eventType==="related_request_created")return "Pratica collegata creata";if(event.eventType==="email_sent")return event.amountCents!=null?"Preventivo inviato":"Email inviata";if(event.eventType==="payment_reported")return "Pagamento comunicato dall’ospite";if(event.eventType==="payment_confirmed")return "Pagamento verificato · Conferma inviata";if(event.eventType==="balance_requested")return "Richiesta saldo inviata";if(event.eventType==="checkin_invited")return "Invito al check-in inviato";if(event.eventType==="checkin_submitted")return "Check-in online completato";if(event.eventType==="checkin_updated")return "Dati del check-in aggiornati";if(event.eventType==="alloggiati_tested")return "Test Alloggiati Web";return `${event.fromStatus?statusLabel(event.fromStatus)+" → ":""}${statusLabel(event.toStatus||"")}`;}

@@ -127,6 +127,13 @@
       "when": 1790625908858,
       "tag": "0017_chubby_nitro",
       "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "6",
+      "when": 1790627140541,
+      "tag": "0018_yielding_shadowcat",
+      "breakpoints": true
     }
   ]
 }

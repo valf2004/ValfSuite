@@ -1,5 +1,5 @@
 import postgres, { type Sql } from "postgres";
-import { alloggiatiReceipts, availabilityEvents, availabilityRequests, checkinDocuments } from "./schema";
+import { alloggiatiReceiptLinks, alloggiatiReceipts, availabilityEvents, availabilityRequests, checkinDocuments } from "./schema";
 import type { CheckinSubmissionRecord } from "../app/lib/checkin-submission";
 
 export type AvailabilityStatus = "quote_requested" | "quote_sent" | "accepted" | "checked_in" | "police_registered" | "archived";
@@ -29,6 +29,8 @@ export type AlloggiatiSendResolution="received"|"not_received";
 export type CheckinDocument=typeof checkinDocuments.$inferSelect;
 export type CheckinDocumentInput=typeof checkinDocuments.$inferInsert;
 export type AlloggiatiReceipt=typeof alloggiatiReceipts.$inferSelect;
+export type AlloggiatiReceiptLink=typeof alloggiatiReceiptLinks.$inferSelect;
+export type LinkedAlloggiatiReceipt=AlloggiatiReceipt&{requestId:string;linkedAt:string};
 
 const url = process.env["DATABASE_URL"];
 if (!url) throw new Error("DATABASE_URL is required in the Docker runtime");
@@ -185,6 +187,14 @@ export async function saveAlloggiatiReceipt(receipt:AlloggiatiReceipt):Promise<A
   await ready();const rows=await sql`INSERT INTO alloggiati_receipts (receipt_date,storage_key,content_type,size,archived_at) VALUES (${receipt.receiptDate},${receipt.storageKey},${receipt.contentType},${receipt.size},${receipt.archivedAt}) ON CONFLICT (receipt_date) DO UPDATE SET storage_key=EXCLUDED.storage_key,content_type=EXCLUDED.content_type,size=EXCLUDED.size,archived_at=EXCLUDED.archived_at RETURNING *`;return mapAlloggiatiReceipt(rows[0]);
 }
 
+export async function getAlloggiatiReceiptForRequest(requestId:string):Promise<LinkedAlloggiatiReceipt|null>{
+  await ready();const rows=await sql`SELECT l.request_id,l.linked_at,r.* FROM alloggiati_receipt_links l JOIN alloggiati_receipts r ON r.receipt_date=l.receipt_date WHERE l.request_id=${requestId} LIMIT 1`;if(!rows[0])return null;return{...mapAlloggiatiReceipt(rows[0]),requestId:String(rows[0].request_id),linkedAt:rows[0].linked_at instanceof Date?rows[0].linked_at.toISOString():String(rows[0].linked_at)};
+}
+
+export async function linkAlloggiatiReceiptToRequest(link:AlloggiatiReceiptLink):Promise<AlloggiatiReceiptLink>{
+  await ready();const rows=await sql`INSERT INTO alloggiati_receipt_links (request_id,receipt_date,linked_at) VALUES (${link.requestId},${link.receiptDate},${link.linkedAt}) ON CONFLICT (request_id) DO UPDATE SET receipt_date=EXCLUDED.receipt_date,linked_at=EXCLUDED.linked_at RETURNING *`;return{requestId:String(rows[0].request_id),receiptDate:dateValue(rows[0].receipt_date),linkedAt:rows[0].linked_at instanceof Date?rows[0].linked_at.toISOString():String(rows[0].linked_at)};
+}
+
 export async function recordAvailabilityEvent(event:NewAvailabilityEvent){await ready();await insertEvent(event);return event;}
 export async function listAvailabilityEvents(){await ready();const rows=await sql`SELECT * FROM availability_events ORDER BY created_at ASC`;return rows.map(mapEventRow);}
 
@@ -224,6 +234,13 @@ async function initializePostgres(client: Sql) {
   await client`CREATE TABLE IF NOT EXISTS checkin_documents (id text PRIMARY KEY,request_id text NOT NULL REFERENCES availability_requests(id) ON DELETE CASCADE,guest_ordinal integer NOT NULL DEFAULT 0,storage_key text NOT NULL,original_name text NOT NULL,content_type text NOT NULL,size integer NOT NULL,uploaded_by text NOT NULL CHECK (uploaded_by IN ('guest','operator')),created_at timestamptz NOT NULL DEFAULT now())`;
   await client`CREATE INDEX IF NOT EXISTS idx_checkin_documents_request_created ON checkin_documents (request_id,created_at)`;
   await client`CREATE TABLE IF NOT EXISTS alloggiati_receipts (receipt_date date PRIMARY KEY,storage_key text NOT NULL,content_type text NOT NULL DEFAULT 'application/pdf',size integer NOT NULL,archived_at timestamptz NOT NULL DEFAULT now())`;
+  await client`CREATE TABLE IF NOT EXISTS alloggiati_receipt_links (request_id text PRIMARY KEY REFERENCES availability_requests(id) ON DELETE CASCADE,receipt_date date NOT NULL REFERENCES alloggiati_receipts(receipt_date) ON DELETE CASCADE,linked_at timestamptz NOT NULL DEFAULT now())`;
+  await client`CREATE INDEX IF NOT EXISTS idx_alloggiati_receipt_links_date ON alloggiati_receipt_links (receipt_date)`;
+  await client`INSERT INTO alloggiati_receipt_links (request_id,receipt_date,linked_at)
+    SELECT c.request_id,r.receipt_date,r.archived_at FROM alloggiati_receipts r JOIN checkin_practices c ON (c.send_attempted_at AT TIME ZONE 'Europe/Rome')::date=r.receipt_date
+    WHERE NOT EXISTS (SELECT 1 FROM alloggiati_receipt_links l WHERE l.request_id=c.request_id)
+      AND (SELECT COUNT(*) FROM checkin_practices matches WHERE (matches.send_attempted_at AT TIME ZONE 'Europe/Rome')::date=r.receipt_date)=1
+    ON CONFLICT (request_id) DO NOTHING`;
   await client`CREATE TABLE IF NOT EXISTS availability_events (id text PRIMARY KEY,request_id text NOT NULL REFERENCES availability_requests(id) ON DELETE CASCADE,event_type text NOT NULL,from_status text,to_status text,actor_email text,note text,subject text,body text,amount_cents integer,attachment_id text,attachment_name text,created_at timestamptz NOT NULL DEFAULT now())`;
   await client`ALTER TABLE availability_events ADD COLUMN IF NOT EXISTS attachment_id text`;
   await client`ALTER TABLE availability_events ADD COLUMN IF NOT EXISTS attachment_name text`;

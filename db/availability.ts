@@ -1,5 +1,5 @@
 import { and, asc, desc, eq, isNull } from "drizzle-orm";
-import { alloggiatiReceipts, availabilityEvents, availabilityQuotes, availabilityRequests, checkinDocuments, checkinGuests, checkinPractices, paymentSubmissions } from "./schema";
+import { alloggiatiReceiptLinks, alloggiatiReceipts, availabilityEvents, availabilityQuotes, availabilityRequests, checkinDocuments, checkinGuests, checkinPractices, paymentSubmissions } from "./schema";
 import type { CheckinSubmissionRecord } from "../app/lib/checkin-submission";
 
 export type AvailabilityStatus = "quote_requested" | "quote_sent" | "accepted" | "checked_in" | "police_registered" | "archived";
@@ -21,6 +21,8 @@ export type AlloggiatiSendResolution="received"|"not_received";
 export type CheckinDocument=typeof checkinDocuments.$inferSelect;
 export type CheckinDocumentInput=typeof checkinDocuments.$inferInsert;
 export type AlloggiatiReceipt=typeof alloggiatiReceipts.$inferSelect;
+export type AlloggiatiReceiptLink=typeof alloggiatiReceiptLinks.$inferSelect;
+export type LinkedAlloggiatiReceipt=AlloggiatiReceipt&{requestId:string;linkedAt:string};
 
 const usesPostgres=()=>Boolean(process.env["DATABASE_URL"]?.trim());
 const postgresRepository=()=>import("./availability.postgres");
@@ -174,6 +176,16 @@ export async function getAlloggiatiReceipt(receiptDate:string):Promise<Alloggiat
 export async function saveAlloggiatiReceipt(receipt:AlloggiatiReceipt):Promise<AlloggiatiReceipt>{
   if(usesPostgres())return (await postgresRepository()).saveAlloggiatiReceipt(receipt);
   const {getDb}=await import(".");const rows=await getDb().insert(alloggiatiReceipts).values(receipt).onConflictDoUpdate({target:alloggiatiReceipts.receiptDate,set:{storageKey:receipt.storageKey,contentType:receipt.contentType,size:receipt.size,archivedAt:receipt.archivedAt}}).returning();return rows[0];
+}
+
+export async function getAlloggiatiReceiptForRequest(requestId:string):Promise<LinkedAlloggiatiReceipt|null>{
+  if(usesPostgres())return (await postgresRepository()).getAlloggiatiReceiptForRequest(requestId);
+  const {getDb}=await import(".");const rows=await getDb().select({requestId:alloggiatiReceiptLinks.requestId,linkedAt:alloggiatiReceiptLinks.linkedAt,receiptDate:alloggiatiReceipts.receiptDate,storageKey:alloggiatiReceipts.storageKey,contentType:alloggiatiReceipts.contentType,size:alloggiatiReceipts.size,archivedAt:alloggiatiReceipts.archivedAt}).from(alloggiatiReceiptLinks).innerJoin(alloggiatiReceipts,eq(alloggiatiReceiptLinks.receiptDate,alloggiatiReceipts.receiptDate)).where(eq(alloggiatiReceiptLinks.requestId,requestId)).limit(1);return rows[0]||null;
+}
+
+export async function linkAlloggiatiReceiptToRequest(link:AlloggiatiReceiptLink):Promise<AlloggiatiReceiptLink>{
+  if(usesPostgres())return (await postgresRepository()).linkAlloggiatiReceiptToRequest(link);
+  const {getDb}=await import(".");const rows=await getDb().insert(alloggiatiReceiptLinks).values(link).onConflictDoUpdate({target:alloggiatiReceiptLinks.requestId,set:{receiptDate:link.receiptDate,linkedAt:link.linkedAt}}).returning();return rows[0];
 }
 
 export async function recordAvailabilityEvent(event:NewAvailabilityEvent){

@@ -119,6 +119,14 @@ export const alloggiatiReceipts = sqliteTable("alloggiati_receipts", {
   archivedAt: text("archived_at").notNull().default(sql`CURRENT_TIMESTAMP`),
 });
 
+export const alloggiatiReceiptLinks = sqliteTable("alloggiati_receipt_links", {
+  requestId: text("request_id").primaryKey().references(() => availabilityRequests.id, { onDelete: "cascade" }),
+  receiptDate: text("receipt_date").notNull().references(() => alloggiatiReceipts.receiptDate, { onDelete: "cascade" }),
+  linkedAt: text("linked_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+}, (table) => [
+  index("idx_alloggiati_receipt_links_date").on(table.receiptDate),
+]);
+
 export const availabilityEvents = sqliteTable("availability_events", {
   id: text("id").primaryKey(),
   requestId: text("request_id").notNull().references(() => availabilityRequests.id, { onDelete: "cascade" }),

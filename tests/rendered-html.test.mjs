@@ -139,8 +139,10 @@ test("stores and displays the complete request timeline", async () => {
   assert.match(dashboard,/Apri cronologia/);
   assert.doesNotMatch(dashboard,/>Dettagli</);
   assert.match(dashboard,/request-timeline/);
-  assert.match(dashboard,/sort\(compareStayPeriod\)/);
+  assert.match(dashboard,/sort\(active==="archived"\?compareArchivedRecent:compareStayPeriod\)/);
   assert.match(dashboard,/arrivalDate\.localeCompare\(b\.arrivalDate\)/);
+  assert.match(dashboard,/useState<"all" \| ArchiveOutcome>\("completed"\)/);
+  assert.match(dashboard,/b\.updatedAt\.localeCompare\(a\.updatedAt\)/);
   assert.match(dashboard,/status-modal/);
   assert.match(dashboard,/testo completo di un’email/);
   assert.doesNotMatch(dashboard,/className="request-message"/);
@@ -634,8 +636,8 @@ test("imports and applies the official Alloggiati reference tables", async () =>
   assert.match(migration,/synced_at/);
 });
 
-test("tests, sends and downloads Alloggiati Web receipts with guarded reconciliation", async () => {
-  const [dashboard,page,form,route,sendRoute,resolveRoute,receiptRoute,records,client,repository,postgres,schema,upload,storage,migration,apartmentMigration,receiptMigration]=await Promise.all([
+test("tests, sends, archives and displays Alloggiati Web receipts with guarded reconciliation", async () => {
+  const [dashboard,page,form,route,sendRoute,resolveRoute,receiptRoute,records,client,repository,postgres,schema,upload,storage,migration,apartmentMigration,receiptMigration,receiptLinkMigration]=await Promise.all([
     source("app/area-privata/RequestsDashboard.tsx"),
     source("app/area-riservata/alloggiati/[id]/page.tsx"),
     source("app/area-privata/AlloggiatiTestForm.tsx"),
@@ -653,6 +655,7 @@ test("tests, sends and downloads Alloggiati Web receipts with guarded reconcilia
     source("drizzle/0015_eminent_pyro.sql"),
     source("drizzle/0016_tidy_umar.sql"),
     source("drizzle/0017_chubby_nitro.sql"),
+    source("drizzle/0018_yielding_shadowcat.sql"),
   ]);
   assert.match(dashboard,/Prepara Alloggiati/);
   assert.match(dashboard,/Ricevuta Alloggiati/);
@@ -664,13 +667,16 @@ test("tests, sends and downloads Alloggiati Web receipts with guarded reconcilia
   assert.match(form,/Nessuna schedina acquisita/);
   assert.match(form,/alloggiati-guest-card/);
   assert.match(form,/window\.location\.assign/);
-  assert.match(form,/Archivia e scarica PDF/);
-  assert.match(form,/Scarica ricevuta archiviata/);
+  assert.match(form,/Archivia ricevuta/);
+  assert.match(form,/Visualizza ricevuta/);
+  assert.match(form,/\?download=1/);
+  assert.match(form,/alloggiati-receipt-viewer/);
+  assert.doesNotMatch(form,/Scarica ricevuta archiviata/);
   assert.match(form,/Invio riuscito: schedine acquisite/);
   assert.match(form,/Invio acquisito da Alloggiati Web/);
   assert.match(form,/scrollIntoView/);
-  assert.match(form,/<a href=\{\x60\/area-riservata\/ross1000/);
-  assert.match(form,/<a href="\/area-riservata">Torna alle richieste<\/a>/);
+  assert.match(form,/<Link href=\{\x60\/area-riservata\/ross1000/);
+  assert.match(form,/<Link href="\/area-riservata">Torna alle richieste<\/Link>/);
   assert.match(route,/privateUserFromCookie/);
   assert.match(route,/item\.status!=="checked_in"/);
   assert.match(records,/record\.length!==168/);
@@ -691,7 +697,10 @@ test("tests, sends and downloads Alloggiati Web receipts with guarded reconcilia
   assert.match(receiptRoute,/age<1/);
   assert.match(receiptRoute,/age>30/);
   assert.match(receiptRoute,/privateUserFromCookie/);
-  assert.match(receiptRoute,/receiptEligible/);
+  assert.match(receiptRoute,/getAlloggiatiReceiptForRequest/);
+  assert.match(receiptRoute,/linkAlloggiatiReceiptToRequest/);
+  assert.match(receiptRoute,/export async function POST/);
+  assert.match(receiptRoute,/Content-Disposition/);
   assert.match(receiptRoute,/getAlloggiatiReceipt/);
   assert.match(receiptRoute,/saveAlloggiatiReceipt/);
   assert.match(receiptRoute,/readReceipt/);
@@ -700,18 +709,23 @@ test("tests, sends and downloads Alloggiati Web receipts with guarded reconcilia
   assert.match(repository,/beginAlloggiatiSend/);
   assert.match(repository,/getAlloggiatiReceipt/);
   assert.match(repository,/saveAlloggiatiReceipt/);
+  assert.match(repository,/getAlloggiatiReceiptForRequest/);
+  assert.match(repository,/linkAlloggiatiReceiptToRequest/);
   assert.match(postgres,/recordAlloggiatiTestResult/);
   assert.match(postgres,/send_attempted_at IS NULL/);
   assert.match(postgres,/validated_apartment_id/);
   assert.match(postgres,/CREATE TABLE IF NOT EXISTS alloggiati_receipts/);
+  assert.match(postgres,/CREATE TABLE IF NOT EXISTS alloggiati_receipt_links/);
   assert.match(schema,/alloggiati_tested/);
   assert.match(schema,/alloggiati_sent/);
   assert.match(schema,/alloggiatiReceipts/);
+  assert.match(schema,/alloggiatiReceiptLinks/);
   assert.match(upload,/removeAllCheckinDocuments/);
   assert.match(storage,/storeReceiptBytes/);
   assert.match(migration,/send_attempted_at/);
   assert.match(apartmentMigration,/validated_apartment_id/);
   assert.match(receiptMigration,/CREATE TABLE `alloggiati_receipts`/);
+  assert.match(receiptLinkMigration,/CREATE TABLE `alloggiati_receipt_links`/);
 });
 
 test("produces a locally validated Ross1000 arrival XML without enabling automatic sends", async () => {

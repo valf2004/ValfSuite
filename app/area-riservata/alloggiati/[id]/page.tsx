@@ -1,7 +1,7 @@
 import type {Metadata} from "next";
 import Link from "next/link";
 import {headers} from "next/headers";
-import {getAlloggiatiReceipt,getCheckinSubmission,listAvailabilityRequests} from "../../../../db/availability";
+import {getAlloggiatiReceiptForRequest,getCheckinSubmission,listAvailabilityRequests} from "../../../../db/availability";
 import {listAlloggiatiLookupValues} from "../../../../db/alloggiati-lookups";
 import {PrivateHeader,PrivateLogin} from "../../../area-privata/PrivateChrome";
 import {AlloggiatiTestForm} from "../../../area-privata/AlloggiatiTestForm";
@@ -23,8 +23,8 @@ export default async function AlloggiatiPage({params}:{params:Promise<{id:string
   const apartments=lookups.filter(row=>row.tableName==="ListaAppartamenti").map(row=>({id:row.itemKey,label:`${row.itemValue} · ${row.itemKey}`}));
   const defaultApartmentId=(process.env["ALLOGGIATI_APARTMENT_ID"]||"").trim();
   const configured=Boolean(process.env["ALLOGGIATI_USER"]?.trim()&&process.env["ALLOGGIATI_PASSWORD"]?.trim()&&process.env["ALLOGGIATI_WSKEY"]?.trim()&&(accountMode==="standard"||defaultApartmentId||apartments.length));
-  const receiptDate=dateInRome(draft.sendAttemptedAt);const archivedReceipt=receiptDate?await getAlloggiatiReceipt(receiptDate):null;const receipt=receiptAvailability(draft.sendAttemptedAt,Boolean(archivedReceipt));
-  return <main className="dashboard-page"><PrivateHeader user={user} active="requests"/><AlloggiatiTestForm requestId={id} guestName={item.name} arrivalDate={item.arrivalDate} departureDate={item.departureDate} preview={preview} accountMode={accountMode} apartments={apartments} defaultApartmentId={defaultApartmentId} configured={configured} initialState={draft.state} initialError={draft.lastError} initialValidatedApartmentId={draft.validatedApartmentId} initialSendAttemptedAt={draft.sendAttemptedAt} receiptDate={receipt.date} receiptStatus={receipt.status} receiptArchivedAt={archivedReceipt?.archivedAt}/></main>;
+  const archivedReceipt=await getAlloggiatiReceiptForRequest(id);const receipt=receiptAvailability(draft.sendAttemptedAt,Boolean(archivedReceipt));
+  return <main className="dashboard-page"><PrivateHeader user={user} active="requests"/><AlloggiatiTestForm requestId={id} guestName={item.name} arrivalDate={item.arrivalDate} departureDate={item.departureDate} preview={preview} accountMode={accountMode} apartments={apartments} defaultApartmentId={defaultApartmentId} configured={configured} initialState={draft.state} initialError={draft.lastError} initialValidatedApartmentId={draft.validatedApartmentId} initialSendAttemptedAt={draft.sendAttemptedAt} receiptDate={receipt.date} receiptStatus={receipt.status}/></main>;
 }
 
 function receiptAvailability(attemptedAt?:string|null,archived=false):{date:string;status:"archived"|"available"|"pending"|"expired"|"missing"}{
