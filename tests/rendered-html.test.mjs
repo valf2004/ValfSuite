@@ -4,6 +4,7 @@ import test from "node:test";
 import {buildRoss1000Xml,validateRoss1000Xml} from "../app/lib/ross1000-xml.mjs";
 import {parseStayPrice,paymentStatusForTotal,priceChangeNote} from "../app/lib/stay-price.mjs";
 import {DatabaseSync} from "node:sqlite";
+import {buildRevenueStatistics,prepareRevenueStays,revenueYears} from "../app/lib/revenue-statistics.mjs";
 
 const root = new URL("../", import.meta.url);
 const source = (path) => readFile(new URL(path, root), "utf8");
@@ -163,6 +164,68 @@ test("parses agreed totals in cents and preserves payment verification", () => {
   assert.equal(paymentStatusForTotal("unpaid",45000,0),"unpaid");
   assert.equal(paymentStatusForTotal("reported",45000,45000),"reported");
   assert.match(priceChangeNote(45000,60000),/450,00.*600,00/);
+});
+
+const revenueStay=(overrides={})=>({id:"stay",status:"accepted",archiveOutcome:null,arrivalDate:"2026-01-04",departureDate:"2026-01-06",amountCents:10001,source:"website",...overrides});
+const revenueOptions=(overrides={})=>({granularity:"month",year:2026,source:"all",scope:"confirmed",today:"2026-10-01",...overrides});
+
+test("splits revenue across Mondays, months and years without losing cents",()=>{
+  const stay=revenueStay();
+  const weeks=buildRevenueStatistics([stay],revenueOptions({granularity:"week"}));
+  assert.equal(weeks.rows.find(row=>row.startDate==="2026-01-01").totalCents,5001);
+  assert.equal(weeks.rows.find(row=>row.startDate==="2026-01-05").totalCents,5000);
+  assert.equal(weeks.totalCents,10001);
+  assert.equal(weeks.stayCount,1);
+  const crossing=revenueStay({arrivalDate:"2025-12-30",departureDate:"2026-01-02"});
+  const previous=buildRevenueStatistics([crossing],revenueOptions({year:2025}));
+  const next=buildRevenueStatistics([crossing],revenueOptions());
+  assert.equal(previous.totalCents,6668);
+  assert.equal(next.totalCents,3333);
+  const annual=buildRevenueStatistics([crossing],revenueOptions({granularity:"year"}));
+  assert.equal(annual.totalCents,10001);
+  assert.deepEqual(annual.rows.map(row=>row.totalCents),[6668,3333]);
+  const leap=revenueStay({arrivalDate:"2024-02-28",departureDate:"2024-03-02",amountCents:10000});
+  const months=buildRevenueStatistics([leap],revenueOptions({year:2024}));
+  assert.equal(months.rows[1].totalCents,6667);
+  assert.equal(months.rows[2].totalCents,3333);
+  assert.equal(buildRevenueStatistics([leap],revenueOptions({year:2024,granularity:"week"})).totalCents,months.totalCents);
+});
+
+test("filters revenues by provenance and completion while reporting missing totals",()=>{
+  const stays=[revenueStay(),revenueStay({id:"phone",source:"phone",amountCents:25000}),revenueStay({id:"missing",amountCents:null}),revenueStay({id:"free",amountCents:0}),revenueStay({id:"cancelled",status:"archived",archiveOutcome:"cancelled",amountCents:100000}),revenueStay({id:"quote",status:"quote_sent",amountCents:100000}),revenueStay({id:"completed",status:"archived",archiveOutcome:"completed",amountCents:20000}),revenueStay({id:"future",arrivalDate:"2026-11-01",departureDate:"2026-11-02",amountCents:30000})];
+  const stats=buildRevenueStatistics(stays,revenueOptions());
+  assert.equal(stats.totalCents,85001);
+  assert.equal(stats.stayCount,5);
+  assert.equal(stats.missingCount,1);
+  assert.equal(stats.sourceTotals.phone,25000);
+  assert.equal(stats.sourceTotals.website,60001);
+  const phone=buildRevenueStatistics(stays,revenueOptions({source:"phone"}));
+  assert.equal(phone.totalCents,25000);
+  assert.equal(phone.stayCount,1);
+  assert.equal(phone.missingCount,0);
+  assert.equal(buildRevenueStatistics(stays,revenueOptions({scope:"completed"})).totalCents,55001);
+  assert.equal(buildRevenueStatistics(stays,revenueOptions({today:"2026-01-05",scope:"completed"})).totalCents,0);
+});
+
+test("preserves provenance for linked stays and marks unresolved origins",()=>{
+  const request=(id,overrides={})=>({id,status:"accepted",archiveOutcome:null,sourceRequestId:null,relationReason:null,message:"",arrivalDate:"2026-01-01",departureDate:"2026-01-02",quoteAmountCents:10000,...overrides});
+  const requests=[request("site"),request("booking",{relationReason:"new_stay",message:"Inserimento diretto · Provenienza: Booking.com\n\nNota interna"}),request("airbnb",{relationReason:"new_stay",message:"Inserimento diretto · Provenienza: Airbnb"}),request("linked",{sourceRequestId:"booking",relationReason:"stay_change"}),request("nested",{sourceRequestId:"linked",relationReason:"new_stay"}),request("unknown",{relationReason:"new_stay"}),request("orphan",{sourceRequestId:"deleted"}),request("cycle1",{sourceRequestId:"cycle2"}),request("cycle2",{sourceRequestId:"cycle1"})];
+  const stays=prepareRevenueStays(requests);
+  assert.deepEqual(stays.map(stay=>stay.source),["website","booking","airbnb","booking","booking","unknown","unknown","unknown","unknown"]);
+  assert.equal("message" in stays[0],false);
+  assert.equal(buildRevenueStatistics(stays,revenueOptions({source:"booking"})).totalCents,30000);
+});
+
+test("excludes checkout nights and invalid dates and keeps empty periods visible",()=>{
+  const stays=[revenueStay({departureDate:"2026-01-04"}),revenueStay({id:"invalid",arrivalDate:"2026-02-30"}),revenueStay({id:"checkout",arrivalDate:"2025-12-31",departureDate:"2026-01-01"})];
+  const stats=buildRevenueStatistics(stays,revenueOptions());
+  assert.equal(stats.totalCents,0);
+  assert.equal(stats.stayCount,0);
+  assert.equal(stats.rows.length,12);
+  assert.deepEqual(revenueYears(stays,2026),[2026,2025]);
+  const fullWeek=buildRevenueStatistics([revenueStay({arrivalDate:"2026-01-05",departureDate:"2026-01-12",amountCents:70000})],revenueOptions({granularity:"week"}));
+  assert.equal(fullWeek.rows.find(row=>row.startDate==="2026-01-05").totalCents,70000);
+  assert.equal(fullWeek.rows.find(row=>row.startDate==="2026-01-12").totalCents,0);
 });
 
 test("saves agreed totals and audit atomically without overwriting concurrent changes", async () => {

@@ -353,6 +353,9 @@
   .practice-panel { grid-template-columns:1fr; gap:20px; }
 }
 @media (max-width:560px) {
+  .dashboard-header { flex-wrap:wrap; gap:12px; padding:14px 20px; }
+  .dashboard-header-actions { flex:1 1 100%; flex-wrap:wrap; }
+  .dashboard-nav { flex:1 1 auto; flex-wrap:wrap; justify-content:center; border-radius:14px; }
   .checkin-demo { align-items:flex-start; flex-direction:column; gap:1px; }
   .checkin-intro { padding:55px 20px 38px; text-align:left; }
   .checkin-intro > p:last-child { font-size:21px; }
