@@ -1,7 +1,8 @@
 import { headers } from "next/headers";
-import { createAvailabilityRequest, listAvailabilityEvents, listAvailabilityRequests, recordAvailabilityEvent, updateAvailabilityStatus, type AvailabilityStatus } from "../../../../db/availability";
+import { createAvailabilityRequest, listAvailabilityEvents, listAvailabilityRequests, recordAvailabilityEvent, updateAvailabilityStatus, updateStayPrice, type AvailabilityStatus } from "../../../../db/availability";
 import { privateUserFromCookie } from "../../../lib/google-auth";
 import { todayAtProperty } from "../../../lib/property-date";
+import {parseStayPrice} from "../../../lib/stay-price.mjs";
 
 const statuses = ["quote_requested", "quote_sent", "accepted", "checked_in", "police_registered", "archived"] as const;
 const outcomes = ["completed", "cancelled", "unavailable"] as const;
@@ -29,7 +30,7 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   const user = await authorizedUser();
   if (!user) return Response.json({ message: "Accesso non autorizzato." }, { status: 401 });
-  const data = await request.json().catch(() => null) as { mode?:unknown; sourceId?:unknown; relationReason?:unknown; firstName?:unknown; lastName?:unknown; email?:unknown; arrivalDate?:unknown; departureDate?:unknown; guestCount?:unknown; language?:unknown; source?:unknown; note?:unknown; force?:unknown } | null;
+  const data = await request.json().catch(() => null) as { mode?:unknown; sourceId?:unknown; relationReason?:unknown; firstName?:unknown; lastName?:unknown; email?:unknown; arrivalDate?:unknown; departureDate?:unknown; guestCount?:unknown; language?:unknown; source?:unknown; note?:unknown; force?:unknown; amount?:unknown } | null;
   if(data?.mode==="direct"){
     const languages=["it","en","fr","es","de"] as const;
     const sources=["phone","booking","airbnb","walk_in","other"] as const;
@@ -38,6 +39,9 @@ export async function POST(request: Request) {
     const name=`${firstName} ${lastName}`.trim();
     const email=typeof data.email==="string"?data.email.trim().toLowerCase().slice(0,320):"";
     const guestCount=Number(data.guestCount);
+    const hasAmount=data.amount!==undefined&&data.amount!=="";
+    const quoteAmountCents=hasAmount?parseStayPrice(data.amount):null;
+    if(hasAmount&&quoteAmountCents==null)return Response.json({message:"Inserisci un prezzo totale valido, ad esempio 450,00."},{status:400});
     if(!firstName||!lastName||typeof data.arrivalDate!=="string"||typeof data.departureDate!=="string"||typeof data.language!=="string"||!languages.includes(data.language as typeof languages[number])||typeof data.source!=="string"||!sources.includes(data.source as typeof sources[number]))return Response.json({message:"Controlla i dati del soggiorno."},{status:400});
     if(email&&!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))return Response.json({message:"Inserisci un indirizzo email valido oppure lascia il campo vuoto."},{status:400});
     if(!isIsoDate(data.arrivalDate)||!isIsoDate(data.departureDate)||data.departureDate<=data.arrivalDate||!Number.isInteger(guestCount)||guestCount<1||guestCount>4)return Response.json({message:"Controlla le date e il numero degli ospiti."},{status:400});
@@ -51,8 +55,8 @@ export async function POST(request: Request) {
     const id=crypto.randomUUID();
     const overlapNote=conflicts.length?`Sovrapposizione confermata manualmente con: ${conflicts.map(item=>`${item.name} (${item.arrivalDate}–${item.departureDate})`).join(", ")}.`:"";
     const message=[`Inserimento diretto · Provenienza: ${sourceLabels[source]}`,note,overlapNote].filter(Boolean).join("\n\n");
-    await createAvailabilityRequest({id,status:"accepted",paymentStatus:"unpaid",sourceRequestId:null,relationReason:"new_stay",firstName,lastName,name,email,arrivalDate:data.arrivalDate,departureDate:data.departureDate,guestCount,message,language:data.language as typeof languages[number],privacyAcceptedAt:now,createdAt:now,updatedAt:now});
-    const event=await recordAvailabilityEvent({requestId:id,eventType:"request_created",toStatus:"accepted",actorEmail:user.email,note:[`Soggiorno diretto inserito dall’operatore · Provenienza: ${sourceLabels[source]} · ${data.arrivalDate}–${data.departureDate}`,note,overlapNote].filter(Boolean).join("\n\n"),createdAt:now});
+    await createAvailabilityRequest({id,status:"accepted",paymentStatus:"unpaid",sourceRequestId:null,relationReason:"new_stay",firstName,lastName,name,email,arrivalDate:data.arrivalDate,departureDate:data.departureDate,guestCount,message,language:data.language as typeof languages[number],quoteAmountCents,privacyAcceptedAt:now,createdAt:now,updatedAt:now});
+    const event=await recordAvailabilityEvent({requestId:id,eventType:"request_created",toStatus:"accepted",actorEmail:user.email,note:[`Soggiorno diretto inserito dall’operatore · Provenienza: ${sourceLabels[source]} · ${data.arrivalDate}–${data.departureDate}`,note,overlapNote].filter(Boolean).join("\n\n"),amountCents:quoteAmountCents,createdAt:now});
     const created=(await listAvailabilityRequests()).find(item=>item.id===id);
     if(!created)return Response.json({message:"Creazione non completata."},{status:500});
     return Response.json({request:created,events:[event]},{status:201});
@@ -79,7 +83,18 @@ export async function POST(request: Request) {
 export async function PATCH(request: Request) {
   const user = await authorizedUser();
   if (!user) return Response.json({ message: "Accesso non autorizzato." }, { status: 401 });
-  const data = await request.json().catch(() => null) as { id?: unknown; status?: unknown; archiveOutcome?: unknown; note?: unknown; force?:unknown } | null;
+  const data = await request.json().catch(() => null) as { id?: unknown; status?: unknown; archiveOutcome?: unknown; note?: unknown; force?:unknown; action?:unknown; amount?:unknown; previousAmountCents?:unknown } | null;
+  if(data?.action==="amount"){
+    const amountCents=parseStayPrice(data.amount);
+    if(typeof data.id!=="string"||amountCents==null||(data.previousAmountCents!==null&&(!Number.isInteger(data.previousAmountCents)||Number(data.previousAmountCents)<0||Number(data.previousAmountCents)>2147483647)))return Response.json({message:"Inserisci un prezzo totale valido, ad esempio 450,00."},{status:400});
+    try{
+      const existing=(await listAvailabilityRequests()).find(item=>item.id===data.id);
+      if(!existing)return Response.json({message:"Richiesta non trovata."},{status:404});
+      const result=await updateStayPrice(data.id,amountCents,data.previousAmountCents as number|null,user.email);
+      if(!result)return Response.json({message:"L’importo è stato aggiornato da un altro operatore. Ricarica la pagina prima di riprovare."},{status:409});
+      return Response.json(result);
+    }catch(error){console.error("stay_price_update_failed",error instanceof Error?error.message:"unknown");return Response.json({message:"Salvataggio dell’importo non riuscito. Riprova."},{status:500});}
+  }
   if (!data || typeof data.id !== "string" || typeof data.status !== "string" || !statuses.includes(data.status as RequestStatus) || (data.status === "archived" && (typeof data.archiveOutcome !== "string" || !outcomes.includes(data.archiveOutcome as typeof outcomes[number])))) {
     return Response.json({ message: "Aggiornamento non valido." }, { status: 400 });
   }

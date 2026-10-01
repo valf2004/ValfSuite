@@ -2,6 +2,8 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
 import {buildRoss1000Xml,validateRoss1000Xml} from "../app/lib/ross1000-xml.mjs";
+import {parseStayPrice,paymentStatusForTotal,priceChangeNote} from "../app/lib/stay-price.mjs";
+import {DatabaseSync} from "node:sqlite";
 
 const root = new URL("../", import.meta.url);
 const source = (path) => readFile(new URL(path, root), "utf8");
@@ -124,7 +126,7 @@ test("sends localized quotes and advances the workflow", async () => {
   assert.match(route, /privateUserFromCookie/);
   assert.match(route, /recordSentQuote/);
   assert.match(route, /\{LINK_PAGAMENTO\}/);
-  assert.match(dashboard, /formatCurrency\(item\.quoteAmountCents\)/);
+  assert.match(dashboard, /StayPriceEditor value=\{item\.quoteAmountCents\}/);
   assert.match(dashboard, /Preventivo non registrato/);
   assert.match(mailer, /sendQuoteEmail/);
   assert.match(mailer, /return \{ sent: true as const, subject, body \}/);
@@ -151,6 +153,54 @@ test("stores and displays the complete request timeline", async () => {
   assert.match(statusRoute,/note/);
   assert.match(requestRoute,/recordAvailabilityEvent/);
   assert.match(migration,/idx_availability_events_request_created/);
+});
+
+test("parses agreed totals in cents and preserves payment verification", () => {
+  for(const [text,cents] of [["450,00",45000],["450.5",45050],[" 12,34 ",1234],["0",0],["0,29",29],["21474836,47",2147483647]])assert.equal(parseStayPrice(text),cents);
+  for(const value of ["",null,450,"-1","1,234","1.000,00","1e3","NaN","Infinity","21474836,48"])assert.equal(parseStayPrice(value),null);
+  assert.equal(paymentStatusForTotal("paid",60000,45000),"partial");
+  assert.equal(paymentStatusForTotal("partial",45000,45000),"paid");
+  assert.equal(paymentStatusForTotal("unpaid",45000,0),"unpaid");
+  assert.equal(paymentStatusForTotal("reported",45000,45000),"reported");
+  assert.match(priceChangeNote(45000,60000),/450,00.*600,00/);
+});
+
+test("saves agreed totals and audit atomically without overwriting concurrent changes", async () => {
+  const repository=await source("db/availability.ts");
+  const operation=repository.split("export async function updateStayPrice(")[1].split("export async function recordSentQuote")[0];
+  const statements=[...operation.matchAll(/d1\.prepare\(`([^`]+)`\)/g)].map(match=>match[1]);
+  assert.equal(statements.length,2);
+  const db=new DatabaseSync(":memory:");
+  try{
+    db.exec(`CREATE TABLE availability_requests (id TEXT PRIMARY KEY,status TEXT,payment_status TEXT,quote_amount_cents INTEGER,updated_at TEXT);
+      CREATE TABLE availability_events (id TEXT PRIMARY KEY,request_id TEXT,event_type TEXT,from_status TEXT,to_status TEXT,actor_email TEXT,note TEXT,amount_cents INTEGER,created_at TEXT);
+      INSERT INTO availability_requests VALUES ('stay','accepted','paid',45000,'original'),('direct','accepted','unpaid',NULL,'original');
+      INSERT INTO availability_events (id,request_id,event_type,amount_cents) VALUES ('payment','stay','payment_confirmed',45000);`);
+    let sequence=0;
+    const save=(id,previous,total)=>{
+      db.exec("BEGIN");
+      try{
+        db.prepare(statements[0]).run(`audit-${++sequence}`,"operator@example.test",priceChangeNote(previous,total),total,"updated",id,previous,total);
+        const rows=db.prepare(statements[1]).all(total,"updated",id,total,id,id,previous);
+        db.exec("COMMIT");return rows;
+      }catch(error){db.exec("ROLLBACK");throw error;}
+    };
+    assert.equal(save("stay",45000,60000).length,1);
+    assert.equal(db.prepare("SELECT payment_status FROM availability_requests WHERE id='stay'").get().payment_status,"partial");
+    assert.equal(save("stay",45000,50000).length,0);
+    assert.equal(db.prepare("SELECT quote_amount_cents FROM availability_requests WHERE id='stay'").get().quote_amount_cents,60000);
+    assert.equal(db.prepare("SELECT COUNT(*) AS count FROM availability_events WHERE event_type='amount_updated'").get().count,1);
+    assert.equal(save("direct",null,30000).length,1);
+    assert.equal(db.prepare("SELECT quote_amount_cents FROM availability_requests WHERE id='direct'").get().quote_amount_cents,30000);
+    db.exec("UPDATE availability_requests SET payment_status='reported' WHERE id='stay'");
+    assert.equal(save("stay",60000,45000).length,1);
+    assert.equal(db.prepare("SELECT payment_status FROM availability_requests WHERE id='stay'").get().payment_status,"reported");
+    assert.equal(db.prepare("SELECT amount_cents FROM availability_events WHERE id='payment'").get().amount_cents,45000);
+    const before=db.prepare("SELECT COUNT(*) AS count FROM availability_events").get().count;
+    save("stay",45000,45000);
+    assert.equal(db.prepare("SELECT COUNT(*) AS count FROM availability_events").get().count,before);
+    assert.equal(save("missing",null,10000).length,0);
+  }finally{db.close();}
 });
 
 test("persists the sent quote value and message history", async () => {
@@ -344,7 +394,7 @@ test("returns expired private sessions to the login page", async () => {
     source("app/api/gestione/ricevute/[id]/route.ts"),
     source("app/checkin.css"),
   ]);
-  assert.equal((dashboard.match(/authenticatedFetch\(/g)||[]).length,6);
+  assert.equal((dashboard.match(/authenticatedFetch\(/g)||[]).length,7);
   assert.match(authenticatedFetch,/response\.status !== 401/);
   assert.match(authenticatedFetch,/window\.location\.replace/);
   assert.match(authenticatedFetch,/sessione", "scaduta"/);

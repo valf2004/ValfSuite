@@ -1,6 +1,7 @@
 import postgres, { type Sql } from "postgres";
 import { alloggiatiReceiptLinks, alloggiatiReceipts, availabilityEvents, availabilityRequests, checkinDocuments } from "./schema";
 import type { CheckinSubmissionRecord } from "../app/lib/checkin-submission";
+import {paymentStatusForTotal,priceChangeNote} from "../app/lib/stay-price.mjs";
 
 export type AvailabilityStatus = "quote_requested" | "quote_sent" | "accepted" | "checked_in" | "police_registered" | "archived";
 export type PaymentStatus = "unpaid" | "reported" | "partial" | "paid";
@@ -43,8 +44,8 @@ export async function createAvailabilityRequest(record: NewAvailabilityRecord) {
   const createdAt = record.createdAt ?? new Date().toISOString();
   const updatedAt = record.updatedAt ?? createdAt;
   await sql`INSERT INTO availability_requests
-    (id,status,archive_outcome,source_request_id,relation_reason,first_name,last_name,name,email,arrival_date,departure_date,guest_count,message,language,privacy_accepted_at,created_at,updated_at)
-    VALUES (${record.id},${record.status ?? "quote_requested"},${record.archiveOutcome ?? null},${record.sourceRequestId ?? null},${record.relationReason ?? null},${record.firstName ?? null},${record.lastName ?? null},${record.name},${record.email},${record.arrivalDate},${record.departureDate},${record.guestCount},${record.message ?? ""},${record.language ?? "it"},${record.privacyAcceptedAt},${createdAt},${updatedAt})`;
+    (id,status,archive_outcome,source_request_id,relation_reason,first_name,last_name,name,email,arrival_date,departure_date,guest_count,message,language,quote_amount_cents,privacy_accepted_at,created_at,updated_at)
+    VALUES (${record.id},${record.status ?? "quote_requested"},${record.archiveOutcome ?? null},${record.sourceRequestId ?? null},${record.relationReason ?? null},${record.firstName ?? null},${record.lastName ?? null},${record.name},${record.email},${record.arrivalDate},${record.departureDate},${record.guestCount},${record.message ?? ""},${record.language ?? "it"},${record.quoteAmountCents ?? null},${record.privacyAcceptedAt},${createdAt},${updatedAt})`;
 }
 
 export async function listAvailabilityRequests(status?: AvailabilityStatus) {
@@ -72,6 +73,23 @@ export async function recordSentQuote(quote:SentQuote) {
   return rows.map(mapRow);
 }
 
+export async function updateStayPrice(id:string,amountCents:number,previousAmountCents:number|null,actorEmail:string){
+  await ready();
+  return sql.begin(async transaction=>{
+    const [current]=await transaction`SELECT * FROM availability_requests WHERE id=${id} FOR UPDATE`;
+    if(!current)return null;
+    const previous=current.quote_amount_cents==null?null:Number(current.quote_amount_cents);
+    if(previous!==previousAmountCents)return null;
+    if(previous===amountCents)return {request:mapRow(current),event:null};
+    const [payments]=await transaction`SELECT COALESCE(SUM(amount_cents),0) AS confirmed FROM availability_events WHERE request_id=${id} AND event_type='payment_confirmed'`;
+    const paymentStatus=paymentStatusForTotal(String(current.payment_status) as PaymentStatus,amountCents,Number(payments.confirmed));
+    const createdAt=new Date().toISOString();const eventId=crypto.randomUUID();
+    const [updated]=await transaction`UPDATE availability_requests SET quote_amount_cents=${amountCents},payment_status=${paymentStatus},updated_at=${createdAt} WHERE id=${id} RETURNING *`;
+    const [event]=await transaction`INSERT INTO availability_events (id,request_id,event_type,from_status,to_status,actor_email,note,amount_cents,created_at) VALUES (${eventId},${id},'amount_updated',${current.status},${current.status},${actorEmail},${priceChangeNote(previous,amountCents)},${amountCents},${createdAt}) RETURNING *`;
+    return {request:mapRow(updated),event:mapEventRow(event)};
+  });
+}
+
 export async function recordPaymentConfirmation(input:PaymentConfirmationInput) {
   await ready();
   const current=await sql`SELECT status FROM availability_requests WHERE id=${input.requestId}`;
@@ -88,7 +106,7 @@ export async function recordPaymentConfirmation(input:PaymentConfirmationInput) 
 export async function recordGuestCommunication(input:GuestCommunicationInput) {
   await ready();
   const createdAt=new Date().toISOString();
-  if(input.paymentTokenHash)await sql`UPDATE availability_quotes SET token_hash=${input.paymentTokenHash} WHERE request_id=${input.requestId} AND active=true`;
+  if(input.paymentTokenHash)await sql`UPDATE availability_quotes SET token_hash=${input.paymentTokenHash},active=true WHERE id=(SELECT id FROM availability_quotes WHERE request_id=${input.requestId} ORDER BY created_at DESC LIMIT 1)`;
   const rows=await sql`UPDATE availability_requests SET updated_at=${createdAt} WHERE id=${input.requestId} RETURNING *`;
   if(rows.length)await insertEvent({requestId:input.requestId,eventType:input.eventType,toStatus:String(rows[0].status),actorEmail:input.actorEmail,note:input.note,subject:input.subject,body:input.body,createdAt});
   return rows.map(mapRow);
@@ -155,7 +173,7 @@ export async function resolveAlloggiatiSendAttempt(requestId:string,resolution:A
 
 export async function findActiveQuoteByTokenHash(tokenHash:string):Promise<PublicQuote|null> {
   await ready();
-  const rows=await sql`SELECT q.id AS quote_id,q.request_id,q.amount_cents,q.requested_payment_cents,r.name,r.email,r.arrival_date,r.departure_date,r.guest_count,r.language,r.status,COALESCE((SELECT SUM(e.amount_cents) FROM availability_events e WHERE e.request_id=q.request_id AND e.event_type='payment_confirmed'),0) AS confirmed_amount_cents FROM availability_quotes q JOIN availability_requests r ON r.id=q.request_id WHERE q.token_hash=${tokenHash} AND q.active=true LIMIT 1`;
+  const rows=await sql`SELECT q.id AS quote_id,q.request_id,r.quote_amount_cents AS amount_cents,LEAST(r.quote_amount_cents,COALESCE(q.requested_payment_cents,ROUND(r.quote_amount_cents*.3))) AS requested_payment_cents,r.name,r.email,r.arrival_date,r.departure_date,r.guest_count,r.language,r.status,COALESCE((SELECT SUM(e.amount_cents) FROM availability_events e WHERE e.request_id=q.request_id AND e.event_type='payment_confirmed'),0) AS confirmed_amount_cents FROM availability_quotes q JOIN availability_requests r ON r.id=q.request_id WHERE q.token_hash=${tokenHash} AND q.active=true AND r.quote_amount_cents IS NOT NULL LIMIT 1`;
   if(!rows.length)return null;
   const row=rows[0];
   return {quoteId:String(row.quote_id),requestId:String(row.request_id),name:String(row.name),email:String(row.email),arrivalDate:dateValue(row.arrival_date),departureDate:dateValue(row.departure_date),guestCount:Number(row.guest_count),language:String(row.language),amountCents:Number(row.amount_cents),requestedPaymentCents:row.requested_payment_cents==null?Math.round(Number(row.amount_cents)*.3):Number(row.requested_payment_cents),confirmedAmountCents:Number(row.confirmed_amount_cents),status:String(row.status) as AvailabilityStatus};

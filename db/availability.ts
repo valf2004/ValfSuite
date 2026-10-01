@@ -1,6 +1,7 @@
 import { and, asc, desc, eq, isNull } from "drizzle-orm";
 import { alloggiatiReceiptLinks, alloggiatiReceipts, availabilityEvents, availabilityQuotes, availabilityRequests, checkinDocuments, checkinGuests, checkinPractices, paymentSubmissions } from "./schema";
 import type { CheckinSubmissionRecord } from "../app/lib/checkin-submission";
+import {priceChangeNote} from "../app/lib/stay-price.mjs";
 
 export type AvailabilityStatus = "quote_requested" | "quote_sent" | "accepted" | "checked_in" | "police_registered" | "archived";
 export type PaymentStatus = "unpaid" | "reported" | "partial" | "paid";
@@ -46,6 +47,27 @@ export async function updateAvailabilityStatus(id:string,status:AvailabilityStat
   return updated;
 }
 
+export async function updateStayPrice(id:string,amountCents:number,previousAmountCents:number|null,actorEmail:string){
+  if(usesPostgres())return (await postgresRepository()).updateStayPrice(id,amountCents,previousAmountCents,actorEmail);
+  const {getD1,getDb}=await import(".");const d1=getD1();const db=getDb();
+  const createdAt=new Date().toISOString();const eventId=crypto.randomUUID();
+  const results=await d1.batch([
+    d1.prepare(`INSERT INTO availability_events (id,request_id,event_type,from_status,to_status,actor_email,note,amount_cents,created_at)
+      SELECT ?,id,'amount_updated',status,status,?,?,?,? FROM availability_requests WHERE id=? AND quote_amount_cents IS ? AND quote_amount_cents IS NOT ?`)
+      .bind(eventId,actorEmail,priceChangeNote(previousAmountCents,amountCents),amountCents,createdAt,id,previousAmountCents,amountCents),
+    d1.prepare(`UPDATE availability_requests SET quote_amount_cents=?,updated_at=?,payment_status=CASE
+      WHEN payment_status='reported' THEN 'reported'
+      WHEN COALESCE((SELECT SUM(amount_cents) FROM availability_events WHERE request_id=? AND event_type='payment_confirmed'),0)>=? THEN 'paid'
+      WHEN COALESCE((SELECT SUM(amount_cents) FROM availability_events WHERE request_id=? AND event_type='payment_confirmed'),0)>0 THEN 'partial'
+      ELSE 'unpaid' END WHERE id=? AND quote_amount_cents IS ? RETURNING id`)
+      .bind(amountCents,createdAt,id,amountCents,id,id,previousAmountCents),
+  ]);
+  if(!results[1].results.length)return null;
+  const [request]=await db.select().from(availabilityRequests).where(eq(availabilityRequests.id,id));
+  const [event]=await db.select().from(availabilityEvents).where(eq(availabilityEvents.id,eventId));
+  return {request,event:event??null};
+}
+
 export async function recordSentQuote(quote:SentQuote){
   if(usesPostgres())return (await postgresRepository()).recordSentQuote(quote);
   const {getDb}=await import(".");const db=getDb();const createdAt=new Date().toISOString();
@@ -70,7 +92,10 @@ export async function recordPaymentConfirmation(input:PaymentConfirmationInput){
 export async function recordGuestCommunication(input:GuestCommunicationInput){
   if(usesPostgres())return (await postgresRepository()).recordGuestCommunication(input);
   const {getDb}=await import(".");const db=getDb();const createdAt=new Date().toISOString();
-  if(input.paymentTokenHash)await db.update(availabilityQuotes).set({tokenHash:input.paymentTokenHash}).where(and(eq(availabilityQuotes.requestId,input.requestId),eq(availabilityQuotes.active,true)));
+  if(input.paymentTokenHash){
+    const [latest]=await db.select({id:availabilityQuotes.id}).from(availabilityQuotes).where(eq(availabilityQuotes.requestId,input.requestId)).orderBy(desc(availabilityQuotes.createdAt)).limit(1);
+    if(latest)await db.update(availabilityQuotes).set({tokenHash:input.paymentTokenHash,active:true}).where(eq(availabilityQuotes.id,latest.id));
+  }
   const updated=await db.update(availabilityRequests).set({updatedAt:createdAt}).where(eq(availabilityRequests.id,input.requestId)).returning();
   if(updated.length)await recordAvailabilityEvent({requestId:input.requestId,eventType:input.eventType,toStatus:updated[0].status,actorEmail:input.actorEmail,note:input.note,subject:input.subject,body:input.body,createdAt});
   return updated;
@@ -147,9 +172,10 @@ export async function resolveAlloggiatiSendAttempt(requestId:string,resolution:A
 
 export async function findActiveQuoteByTokenHash(tokenHash:string):Promise<PublicQuote|null>{
   if(usesPostgres())return (await postgresRepository()).findActiveQuoteByTokenHash(tokenHash);
-  const {getDb}=await import(".");const db=getDb();const rows=await db.select({quoteId:availabilityQuotes.id,requestId:availabilityQuotes.requestId,amountCents:availabilityQuotes.amountCents,requestedPaymentCents:availabilityQuotes.requestedPaymentCents,name:availabilityRequests.name,email:availabilityRequests.email,arrivalDate:availabilityRequests.arrivalDate,departureDate:availabilityRequests.departureDate,guestCount:availabilityRequests.guestCount,language:availabilityRequests.language,status:availabilityRequests.status}).from(availabilityQuotes).innerJoin(availabilityRequests,eq(availabilityQuotes.requestId,availabilityRequests.id)).where(and(eq(availabilityQuotes.tokenHash,tokenHash),eq(availabilityQuotes.active,true))).limit(1);
+  const {getDb}=await import(".");const db=getDb();const rows=await db.select({quoteId:availabilityQuotes.id,requestId:availabilityQuotes.requestId,amountCents:availabilityRequests.quoteAmountCents,requestedPaymentCents:availabilityQuotes.requestedPaymentCents,name:availabilityRequests.name,email:availabilityRequests.email,arrivalDate:availabilityRequests.arrivalDate,departureDate:availabilityRequests.departureDate,guestCount:availabilityRequests.guestCount,language:availabilityRequests.language,status:availabilityRequests.status}).from(availabilityQuotes).innerJoin(availabilityRequests,eq(availabilityQuotes.requestId,availabilityRequests.id)).where(and(eq(availabilityQuotes.tokenHash,tokenHash),eq(availabilityQuotes.active,true))).limit(1);
   if(!rows[0])return null;const row=rows[0];const confirmed=await db.select({amountCents:availabilityEvents.amountCents}).from(availabilityEvents).where(and(eq(availabilityEvents.requestId,rows[0].requestId),eq(availabilityEvents.eventType,"payment_confirmed")));
-  return {...row,requestedPaymentCents:row.requestedPaymentCents??Math.round(row.amountCents*.3),confirmedAmountCents:confirmed.reduce((total,event)=>total+(event.amountCents||0),0)};
+  if(row.amountCents==null)return null;
+  return {...row,amountCents:row.amountCents,requestedPaymentCents:Math.min(row.amountCents,row.requestedPaymentCents??Math.round(row.amountCents*.3)),confirmedAmountCents:confirmed.reduce((total,event)=>total+(event.amountCents||0),0)};
 }
 
 export async function createPaymentSubmission(input:PaymentSubmissionInput){
