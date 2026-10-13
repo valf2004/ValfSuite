@@ -2,6 +2,7 @@ import postgres, { type Sql } from "postgres";
 import { alloggiatiReceiptLinks, alloggiatiReceipts, availabilityEvents, availabilityRequests, checkinDocuments } from "./schema";
 import type { CheckinSubmissionRecord } from "../app/lib/checkin-submission";
 import {paymentStatusForTotal,priceChangeNote} from "../app/lib/stay-price.mjs";
+import {requestDeletionBlockSql,type DeleteRequestResult} from "../app/lib/request-deletion.mjs";
 
 export type AvailabilityStatus = "quote_requested" | "quote_sent" | "accepted" | "checked_in" | "police_registered" | "archived";
 export type PaymentStatus = "unpaid" | "reported" | "partial" | "paid";
@@ -43,9 +44,12 @@ export async function createAvailabilityRequest(record: NewAvailabilityRecord) {
   await ready();
   const createdAt = record.createdAt ?? new Date().toISOString();
   const updatedAt = record.updatedAt ?? createdAt;
-  await sql`INSERT INTO availability_requests
+  await sql.begin(async transaction=>{
+  if(record.sourceRequestId){const parent=await transaction`SELECT id FROM availability_requests WHERE id=${record.sourceRequestId} FOR KEY SHARE`;if(!parent.length)throw new Error("La pratica di origine non esiste più.");}
+  await transaction`INSERT INTO availability_requests
     (id,status,archive_outcome,source_request_id,relation_reason,first_name,last_name,name,email,arrival_date,departure_date,guest_count,message,language,quote_amount_cents,privacy_accepted_at,created_at,updated_at)
     VALUES (${record.id},${record.status ?? "quote_requested"},${record.archiveOutcome ?? null},${record.sourceRequestId ?? null},${record.relationReason ?? null},${record.firstName ?? null},${record.lastName ?? null},${record.name},${record.email},${record.arrivalDate},${record.departureDate},${record.guestCount},${record.message ?? ""},${record.language ?? "it"},${record.quoteAmountCents ?? null},${record.privacyAcceptedAt},${createdAt},${updatedAt})`;
+  });
 }
 
 export async function listAvailabilityRequests(status?: AvailabilityStatus) {
@@ -61,6 +65,21 @@ export async function updateAvailabilityStatus(id: string, status: AvailabilityS
   const rows = await sql`UPDATE availability_requests SET status=${status},archive_outcome=${archiveOutcome},updated_at=${updatedAt} WHERE id=${id} RETURNING *`;
   if(rows.length) await insertEvent({requestId:id,eventType:"status_changed",fromStatus:current[0]?.status==null?null:String(current[0].status),toStatus:status,actorEmail:actorEmail??null,note:note?.trim()||null,createdAt:updatedAt});
   return rows.map(mapRow);
+}
+
+export async function deleteAvailabilityRequest(id:string,updatedAt:string):Promise<DeleteRequestResult>{
+  await ready();
+  return sql.begin(async transaction=>{
+    await transaction`SELECT request_id FROM checkin_practices WHERE request_id=${id} FOR UPDATE`;
+    const [current]=await transaction`SELECT * FROM availability_requests WHERE id=${id} FOR UPDATE`;
+    if(!current)return {status:"missing",storageKeys:[]};
+    const [guard]=await transaction.unsafe(`SELECT ${requestDeletionBlockSql} AS block_reason FROM availability_requests r WHERE r.id=$1`,[id]);
+    if(guard.block_reason)return {status:String(guard.block_reason) as "linked"|"submitted",storageKeys:[]};
+    if(mapRow(current).updatedAt!==updatedAt)return {status:"changed",storageKeys:[]};
+    const files=await transaction`SELECT storage_key AS key FROM checkin_documents WHERE request_id=${id} UNION SELECT receipt_key AS key FROM payment_submissions WHERE request_id=${id} AND receipt_key IS NOT NULL`;
+    await transaction`DELETE FROM availability_requests WHERE id=${id}`;
+    return {status:"deleted",storageKeys:files.map(row=>String(row.key))};
+  });
 }
 
 export async function recordSentQuote(quote:SentQuote) {

@@ -1,12 +1,28 @@
 import { headers } from "next/headers";
-import { createAvailabilityRequest, listAvailabilityEvents, listAvailabilityRequests, recordAvailabilityEvent, updateAvailabilityStatus, updateStayPrice, type AvailabilityStatus } from "../../../../db/availability";
+import { createAvailabilityRequest, deleteAvailabilityRequest, listAvailabilityEvents, listAvailabilityRequests, recordAvailabilityEvent, updateAvailabilityStatus, updateStayPrice, type AvailabilityStatus } from "../../../../db/availability";
 import { privateUserFromCookie } from "../../../lib/google-auth";
 import { todayAtProperty } from "../../../lib/property-date";
 import {parseStayPrice} from "../../../lib/stay-price.mjs";
+import {removeRequestAttachments,requestDeletionMessages} from "../../../lib/request-deletion.mjs";
+import {deleteReceipt} from "../../../lib/receipt-storage";
 
 const statuses = ["quote_requested", "quote_sent", "accepted", "checked_in", "police_registered", "archived"] as const;
 const outcomes = ["completed", "cancelled", "unavailable"] as const;
 type RequestStatus = typeof statuses[number];
+
+export async function DELETE(request:Request){
+  const user=await authorizedUser();
+  if(!user)return Response.json({message:"Accesso non autorizzato."},{status:401});
+  const data=await request.json().catch(()=>null) as {id?:unknown;updatedAt?:unknown;confirmation?:unknown}|null;
+  if(!data||typeof data.id!=="string"||!data.id||data.id.length>128||typeof data.updatedAt!=="string"||!Number.isFinite(Date.parse(data.updatedAt))||data.confirmation!=="ELIMINA DEFINITIVAMENTE")return Response.json({message:"Conferma esplicita di eliminazione mancante o richiesta non valida."},{status:400});
+  try{
+    const result=await deleteAvailabilityRequest(data.id,data.updatedAt);
+    if(result.status!=="deleted"&&result.status!=="missing")return Response.json({message:requestDeletionMessages[result.status]},{status:409});
+    const failed=await removeRequestAttachments(result.storageKeys,data.id,deleteReceipt);
+    if(failed.length)console.error("request_attachment_cleanup_failed",{requestId:data.id,keys:failed,actorEmail:user.email});
+    return Response.json({deletedId:data.id,message:failed.length?"Richiesta eliminata definitivamente. Alcuni allegati non sono stati rimossi dall’archivio file: la pulizia richiede un controllo tecnico.":"Richiesta eliminata definitivamente."});
+  }catch(error){console.error("request_delete_failed",error instanceof Error?error.message:"unknown");return Response.json({message:"Non è stato possibile confermare l’eliminazione. Ricarica la pagina per verificare e riprova."},{status:500});}
+}
 
 async function authorizedUser() {
   const requestHeaders = await headers();

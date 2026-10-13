@@ -2,6 +2,7 @@ import { and, asc, desc, eq, isNull } from "drizzle-orm";
 import { alloggiatiReceiptLinks, alloggiatiReceipts, availabilityEvents, availabilityQuotes, availabilityRequests, checkinDocuments, checkinGuests, checkinPractices, paymentSubmissions } from "./schema";
 import type { CheckinSubmissionRecord } from "../app/lib/checkin-submission";
 import {priceChangeNote} from "../app/lib/stay-price.mjs";
+import {requestDeletionBlockSql,type DeleteRequestResult} from "../app/lib/request-deletion.mjs";
 
 export type AvailabilityStatus = "quote_requested" | "quote_sent" | "accepted" | "checked_in" | "police_registered" | "archived";
 export type PaymentStatus = "unpaid" | "reported" | "partial" | "paid";
@@ -30,6 +31,14 @@ const postgresRepository=()=>import("./availability.postgres");
 
 export async function createAvailabilityRequest(record:NewAvailabilityRecord){
   if(usesPostgres())return (await postgresRepository()).createAvailabilityRequest(record);
+  if(record.sourceRequestId){
+    const {getD1}=await import(".");const createdAt=record.createdAt??new Date().toISOString();
+    const result=await getD1().prepare(`INSERT INTO availability_requests (id,status,payment_status,archive_outcome,source_request_id,relation_reason,first_name,last_name,name,email,arrival_date,departure_date,guest_count,message,language,quote_amount_cents,privacy_accepted_at,created_at,updated_at)
+      SELECT ?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,? WHERE EXISTS (SELECT 1 FROM availability_requests WHERE id=?)`)
+      .bind(record.id,record.status??"quote_requested",record.paymentStatus??"unpaid",record.archiveOutcome??null,record.sourceRequestId,record.relationReason??null,record.firstName??null,record.lastName??null,record.name,record.email,record.arrivalDate,record.departureDate,record.guestCount,record.message??"",record.language??"it",record.quoteAmountCents??null,record.privacyAcceptedAt,createdAt,record.updatedAt??createdAt,record.sourceRequestId).run();
+    if(!result.meta.changes)throw new Error("La pratica di origine non esiste più.");
+    return result;
+  }
   const {getDb}=await import(".");return getDb().insert(availabilityRequests).values(record);
 }
 
@@ -45,6 +54,20 @@ export async function updateAvailabilityStatus(id:string,status:AvailabilityStat
   const updated=await db.update(availabilityRequests).set({status,archiveOutcome,updatedAt}).where(eq(availabilityRequests.id,id)).returning();
   if(updated.length)await recordAvailabilityEvent({requestId:id,eventType:"status_changed",fromStatus:current[0]?.status??null,toStatus:status,actorEmail:actorEmail??null,note:note?.trim()||null,createdAt:updatedAt});
   return updated;
+}
+
+export async function deleteAvailabilityRequest(id:string,updatedAt:string):Promise<DeleteRequestResult>{
+  if(usesPostgres())return (await postgresRepository()).deleteAvailabilityRequest(id,updatedAt);
+  const {getD1}=await import(".");const d1=getD1();
+  const results=await d1.batch([
+    d1.prepare(`SELECT r.id,r.updated_at,${requestDeletionBlockSql} AS block_reason FROM availability_requests r WHERE r.id=?`).bind(id),
+    d1.prepare(`SELECT storage_key AS key FROM checkin_documents WHERE request_id=? UNION SELECT receipt_key AS key FROM payment_submissions WHERE request_id=? AND receipt_key IS NOT NULL`).bind(id,id),
+    d1.prepare(`DELETE FROM availability_requests AS r WHERE r.id=? AND r.updated_at=? AND (${requestDeletionBlockSql}) IS NULL RETURNING id`).bind(id,updatedAt),
+  ]);
+  if(results[2].results.length)return {status:"deleted",storageKeys:results[1].results.map((row:{key:unknown})=>String(row.key))};
+  const current=results[0].results[0];
+  if(!current)return {status:"missing",storageKeys:[]};
+  return {status:current.block_reason?current.block_reason as "linked"|"submitted":"changed",storageKeys:[]};
 }
 
 export async function updateStayPrice(id:string,amountCents:number,previousAmountCents:number|null,actorEmail:string){

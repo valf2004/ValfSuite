@@ -1,13 +1,74 @@
 import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
+import { readFile, readdir } from "node:fs/promises";
 import test from "node:test";
 import {buildRoss1000Xml,validateRoss1000Xml} from "../app/lib/ross1000-xml.mjs";
 import {parseStayPrice,paymentStatusForTotal,priceChangeNote} from "../app/lib/stay-price.mjs";
 import {DatabaseSync} from "node:sqlite";
 import {buildRevenueStatistics,prepareRevenueStays,revenueYears} from "../app/lib/revenue-statistics.mjs";
+import {requestDeletionBlockSql,isRequestAttachment,removeRequestAttachments} from "../app/lib/request-deletion.mjs";
 
 const root = new URL("../", import.meta.url);
 const source = (path) => readFile(new URL(path, root), "utf8");
+
+test("physically deletes only the selected request and cascades its records using the actual schema",async()=>{
+  const db=new DatabaseSync(":memory:");
+  try{
+    for(const file of (await readdir(new URL("drizzle/",root))).filter(name=>name.endsWith(".sql")).sort())db.exec(await source(`drizzle/${file}`));
+    db.exec("PRAGMA foreign_keys=ON");
+    const add=id=>db.prepare("INSERT INTO availability_requests (id,status,name,email,arrival_date,departure_date,guest_count,privacy_accepted_at,updated_at) VALUES (?,'accepted','Test','test@example.test','2026-10-13','2026-10-14',1,'2026-10-01','v1')").run(id);
+    add("mistake");add("other");
+    db.exec(`INSERT INTO checkin_practices (request_id,guest_count,group_type,arrival_time,transport,privacy_accepted_at,source) VALUES ('mistake',1,'single','15:00','AUTO','2026-10-01','operator');
+      INSERT INTO checkin_guests (id,request_id,ordinal,alloggiati_type,first_name,last_name,birth_date,sex_code,citizenship_code,birth_country_code) VALUES ('guest','mistake',0,'16','Test','Guest','1990-01-01','1','100000100','100000100');
+      INSERT INTO checkin_documents (id,request_id,storage_key,original_name,content_type,size,uploaded_by) VALUES ('document','mistake','identity-documents/mistake/document.pdf','document.pdf','application/pdf',10,'operator');
+      INSERT INTO availability_quotes (id,request_id,amount_cents,subject,body,token_hash) VALUES ('quote','mistake',10000,'Test','Test','token-test');
+      INSERT INTO payment_submissions (id,quote_id,request_id,method,paid_amount_cents,paid_at,receipt_key) VALUES ('payment','quote','mistake','bank_transfer',10000,'2026-10-01','mistake/payment.pdf');
+      INSERT INTO availability_events (id,request_id,event_type) VALUES ('event','mistake','request_created');
+      INSERT INTO alloggiati_receipts (receipt_date,storage_key,size) VALUES ('2026-10-01','alloggiati/2026-10-01.pdf',10);
+      INSERT INTO alloggiati_receipt_links (request_id,receipt_date) VALUES ('other','2026-10-01');`);
+    const repository=await source("db/availability.ts");
+    const deletionSql=repository.match(/d1\.prepare\(`(DELETE FROM availability_requests AS r[^`]+)`\)/)[1].replaceAll("${requestDeletionBlockSql}",requestDeletionBlockSql);
+    const remove=db.prepare(deletionSql);
+    assert.equal(remove.all("mistake","stale").length,0);
+    assert.equal(remove.all("mistake","v1").length,1);
+    for(const table of ["checkin_practices","checkin_guests","checkin_documents","availability_quotes","payment_submissions","availability_events"])assert.equal(db.prepare(`SELECT COUNT(*) AS count FROM ${table} WHERE request_id='mistake'`).get().count,0,table);
+    assert.equal(db.prepare("SELECT COUNT(*) AS count FROM availability_requests WHERE id='other'").get().count,1);
+    assert.equal(db.prepare("SELECT COUNT(*) AS count FROM alloggiati_receipts").get().count,1);
+    assert.equal(db.prepare("SELECT COUNT(*) AS count FROM alloggiati_receipt_links WHERE request_id='other'").get().count,1);
+    assert.equal(remove.all("other","v1").length,0);
+    assert.equal(remove.all("mistake","v1").length,0);
+    add("parent");
+    const createLinkedSql=repository.match(/getD1\(\)\.prepare\(`([^`]+)`\)/)[1];
+    const linkedValues=id=>[id,"quote_requested","unpaid",null,"parent","new_stay",null,null,"Test","test@example.test","2026-10-13","2026-10-14",1,"","it",null,"2026-10-01","2026-10-01","v1","parent"];
+    assert.equal(db.prepare(createLinkedSql).run(...linkedValues("child")).changes,1);
+    assert.equal(remove.all("parent","v1").length,0);
+    assert.equal(remove.all("child","v1").length,1);
+    assert.equal(remove.all("parent","v1").length,1);
+    assert.equal(db.prepare(createLinkedSql).run(...linkedValues("orphan")).changes,0);
+    add("sent");
+    db.exec("INSERT INTO checkin_practices (request_id,state,guest_count,group_type,arrival_time,transport,privacy_accepted_at,source,send_attempted_at) VALUES ('sent','error',1,'single','15:00','AUTO','2026-10-01','operator','2026-10-01')");
+    assert.equal(remove.all("sent","v1").length,0);
+    db.exec("UPDATE checkin_practices SET state='sent',send_attempted_at=NULL WHERE request_id='sent'");
+    assert.equal(remove.all("sent","v1").length,0);
+    db.exec("UPDATE checkin_practices SET state='ready',sent_at='2026-10-01' WHERE request_id='sent'");
+    assert.equal(remove.all("sent","v1").length,0);
+    db.exec("DELETE FROM checkin_practices WHERE request_id='sent'; INSERT INTO availability_events (id,request_id,event_type) VALUES ('sent-event','sent','alloggiati_sent')");
+    assert.equal(remove.all("sent","v1").length,0);
+  }finally{db.close();}
+});
+
+test("removes only request-owned attachments and reports cleanup failures",async()=>{
+  assert.equal(isRequestAttachment("identity-documents/mistake/id.pdf","mistake"),true);
+  assert.equal(isRequestAttachment("mistake/payment.jpg","mistake"),true);
+  for(const key of ["other/payment.pdf","identity-documents/other/id.pdf","mistake/../other.pdf","mistake/..\\other.pdf","alloggiati/2026-10-01.pdf"])assert.equal(isRequestAttachment(key,"mistake"),false);
+  const removed=[];
+  const failures=await removeRequestAttachments(["mistake/payment.pdf","mistake/payment.pdf","other/payment.pdf"],"mistake",async key=>{removed.push(key);});
+  assert.deepEqual(removed,["mistake/payment.pdf"]);
+  assert.deepEqual(failures,["other/payment.pdf"]);
+  let attempts=0;
+  assert.deepEqual(await removeRequestAttachments(["mistake/retry.pdf"],"mistake",async()=>{if(++attempts===1)throw new Error("temporary");}),[]);
+  assert.equal(attempts,2);
+  assert.deepEqual(await removeRequestAttachments(["mistake/fail.pdf"],"mistake",async()=>{throw new Error("unavailable");}),["mistake/fail.pdf"]);
+});
 
 test("contains the VALF Suite production metadata", async () => {
   const [layout, packageJson] = await Promise.all([
@@ -457,7 +518,7 @@ test("returns expired private sessions to the login page", async () => {
     source("app/api/gestione/ricevute/[id]/route.ts"),
     source("app/checkin.css"),
   ]);
-  assert.equal((dashboard.match(/authenticatedFetch\(/g)||[]).length,7);
+  assert.equal((dashboard.match(/authenticatedFetch\(/g)||[]).length,8);
   assert.match(authenticatedFetch,/response\.status !== 401/);
   assert.match(authenticatedFetch,/window\.location\.replace/);
   assert.match(authenticatedFetch,/sessione", "scaduta"/);

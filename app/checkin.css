@@ -214,6 +214,16 @@
 .request-card dl { display:flex; gap:0; margin:13px 0; background:var(--ivory); }.request-card dl div { min-width:130px; padding:9px 14px; border-right:1px solid var(--line); }.request-card dt { color:var(--taupe); text-transform:uppercase; letter-spacing:.1em; font-size:9px; }.request-card dd { margin:2px 0 0; color:var(--brown); font-size:13px; font-weight:600; }
 .request-message { margin:10px 0; padding:10px 13px; background:#e8f0ee; color:#385d59; font-size:13px; line-height:1.4; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; }.request-actions { display:flex; align-items:center; gap:8px; flex-wrap:wrap; margin-top:12px; }.request-actions button,.request-actions a { border:1px solid var(--line); border-radius:99px; padding:8px 12px; background:white; color:var(--brown); cursor:pointer; font:600 11px 'DM Sans',sans-serif; text-decoration:none; }.request-actions .primary-action { border-color:var(--sea); background:var(--sea); color:white; }.request-actions button:disabled { opacity:.55; cursor:wait; }
 .request-actions .confirmation-action { border-color:#276555; background:#276555; }
+.request-actions .request-delete-action { border-color:#d6b0a9; color:#9b352a; background:#fffafa; }
+.request-actions .request-delete-action:hover { border-color:#9b352a; background:#fff0ed; }
+.request-delete-dialog { border:0; margin:auto; color:var(--brown); }
+.request-delete-dialog::backdrop { background:rgba(34,29,25,.58); }
+.request-delete-dialog form > p:not(.eyebrow) { color:#76685d; font-size:14px; line-height:1.5; }
+.request-delete-identity { display:flex; flex-direction:column; gap:4px; padding:14px 16px; border-left:3px solid #a53b2f; background:#fbf5f3; }
+.request-delete-identity strong { color:var(--brown); font-size:18px; }
+.request-delete-dialog form .request-delete-error { padding:12px 14px; color:#92372b; background:#fff0ed; }
+.request-delete-dialog .status-modal-actions { flex-wrap:wrap; }
+.request-delete-dialog button:disabled { opacity:.55; cursor:wait; }
 .request-actions .balance-action { border-color:#a35c17; background:#a35c17; }
 .request-actions .checkin-invite-action { border-color:#276555; color:#276555; background:#eef7f4; }
 .request-actions .operator-checkin-action { border-color:#276555; background:#276555; color:white; }
